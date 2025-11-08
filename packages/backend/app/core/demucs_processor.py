@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
+import torchaudio  # FIXED M6: Import at module level, not in hot path
 from demucs.api import Separator
 
 from app.core.logging_config import get_logger
@@ -168,8 +169,6 @@ class DemucsProcessor:
             stems: Dictionary of stem tensors
             cache_path: Directory to save stems
         """
-        import torchaudio
-
         loop = asyncio.get_event_loop()
 
         for stem_name, tensor in stems.items():
@@ -215,7 +214,9 @@ class DemucsProcessor:
             return sha256_hash.digest()
 
         await loop.run_in_executor(None, read_chunks)
-        return sha256_hash.hexdigest()[:16]
+        # FIXED M8: Use 32 chars (128 bits) to reduce collision risk
+        # Birthday paradox: ~2^64 files for 50% collision vs 2^32 for 16 chars
+        return sha256_hash.hexdigest()[:32]
 
     async def _check_cache(self, cache_path: Path) -> bool:
         """Check if all stems exist in cache.

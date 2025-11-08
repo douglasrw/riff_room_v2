@@ -38,6 +38,10 @@ export class WebSocketService {
   private messageHandlers: Set<MessageHandler> = new Set();
   private errorHandlers: Set<ErrorHandler> = new Set();
   private closeHandlers: Set<CloseHandler> = new Set();
+  // FIXED H14: Track reconnection timeout to clean up on disconnect
+  private reconnectTimeout: number | null = null;
+  // FIXED H13: Track intentional disconnect to prevent reconnection
+  private isIntentionalDisconnect = false;
 
   constructor(clientId: string, baseUrl?: string) {
     this.clientId = clientId;
@@ -54,6 +58,9 @@ export class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
       return;
     }
+
+    // FIXED H13: Reset intentional disconnect flag when connecting
+    this.isIntentionalDisconnect = false;
 
     try {
       this.ws = new WebSocket(this.url);
@@ -82,7 +89,10 @@ export class WebSocketService {
         console.log('WebSocket closed');
         this.stopPingInterval();
         this.closeHandlers.forEach((handler) => handler());
-        this.attemptReconnect();
+        // FIXED H13: Only reconnect if disconnect was not intentional
+        if (!this.isIntentionalDisconnect) {
+          this.attemptReconnect();
+        }
       };
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
@@ -93,7 +103,14 @@ export class WebSocketService {
    * Disconnect from WebSocket server
    */
   disconnect(): void {
+    // FIXED H13: Mark as intentional disconnect to prevent reconnection
+    this.isIntentionalDisconnect = true;
     this.stopPingInterval();
+    // FIXED H14: Clear reconnection timeout if pending
+    if (this.reconnectTimeout !== null) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -160,7 +177,9 @@ export class WebSocketService {
 
     console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
-    setTimeout(() => {
+    // FIXED H14: Store timeout ID for cleanup
+    this.reconnectTimeout = window.setTimeout(() => {
+      this.reconnectTimeout = null;
       this.connect();
     }, delay);
   }

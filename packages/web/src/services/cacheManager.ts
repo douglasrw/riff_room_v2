@@ -86,9 +86,15 @@ export class CacheManager<T = any> {
 
     // L1: Check memory cache
     const memoryEntry = this.memoryCache.get(key);
-    if (memoryEntry && !this.isExpired(memoryEntry)) {
-      this.updateAccess(memoryEntry);
-      return memoryEntry.value;
+    if (memoryEntry) {
+      // FIXED H10: Delete expired entries from memory to prevent leak
+      if (this.isExpired(memoryEntry)) {
+        this.currentMemorySize -= memoryEntry.size;
+        this.memoryCache.delete(key);
+      } else {
+        this.updateAccess(memoryEntry);
+        return memoryEntry.value;
+      }
     }
 
     // L2: Check IndexedDB (if available)
@@ -128,8 +134,14 @@ export class CacheManager<T = any> {
   }
 
   private setInMemory(key: string, value: T, size: number): void {
-    // Check if we need to evict
+    // FIXED H11: Reject entries larger than max size
     const maxSize = this.options.maxMemorySizeMB * 1024 * 1024;
+    if (size > maxSize) {
+      console.warn(`Cache entry size (${size} bytes) exceeds max memory (${maxSize} bytes), skipping memory cache`);
+      return;
+    }
+
+    // Check if we need to evict
     while (this.currentMemorySize + size > maxSize && this.memoryCache.size > 0) {
       this.evictLRU();
     }

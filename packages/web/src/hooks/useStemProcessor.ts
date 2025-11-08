@@ -49,9 +49,25 @@ export const useStemProcessor = () => {
   }, []);
 
   const processSong = useCallback(async (file: File) => {
+    // FIXED H8: Prevent concurrent uploads causing memory leaks
+    if (state.isProcessing) {
+      console.warn('Processing already in progress, ignoring new upload');
+      return;
+    }
+
     setState({ isProcessing: true, progress: 0, error: null, canResume: false });
 
     try {
+      // Cleanup previous session's blob URLs
+      stemUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      stemUrlsRef.current = [];
+
+      // Disconnect previous WebSocket if any
+      if (wsRef.current) {
+        wsRef.current.disconnect();
+        wsRef.current = null;
+      }
+
       // FIXED N1: Actually call backend API instead of using mock data
       const formData = new FormData();
       formData.append('file', file);
@@ -145,13 +161,16 @@ export const useStemProcessor = () => {
         canResume: false,
       });
 
-      // FIXED N5: Clear session on upload/API errors (not WebSocket errors)
-      clearProcessingSession();
-
-      // Cleanup on error
-      if (wsRef.current) {
-        wsRef.current.disconnect();
-        wsRef.current = null;
+      // FIXED H9: Use try/finally to ensure WebSocket cleanup even if clearProcessingSession throws
+      try {
+        // FIXED N5: Clear session on upload/API errors (not WebSocket errors)
+        clearProcessingSession();
+      } finally {
+        // Cleanup on error - always runs even if clearProcessingSession throws
+        if (wsRef.current) {
+          wsRef.current.disconnect();
+          wsRef.current = null;
+        }
       }
     }
   }, [loadSong]);

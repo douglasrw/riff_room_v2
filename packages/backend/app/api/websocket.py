@@ -41,8 +41,12 @@ class ConnectionManager:
             logger.info(f"WebSocket connected: {client_id} (total: {len(self.active_connections)})")
 
             # Start cleanup task if not running
+            # FIXED H7: Cancel old task before starting new one to prevent race
             if self._cleanup_task is None or self._cleanup_task.done():
                 self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+            elif not self._cleanup_task.done():
+                # Task already running, no need to start another
+                pass
         except Exception as e:
             # FIXED: If accept fails, don't add to active connections
             logger.error(f"Failed to accept WebSocket for {client_id}: {e}", exc_info=True)
@@ -108,7 +112,11 @@ class ConnectionManager:
                 "type": "complete",
                 "data": result,
             }
-            await self.active_connections[client_id].send_json(message)
+            try:
+                await self.active_connections[client_id].send_json(message)
+            except Exception:
+                # Connection dead, remove it
+                await self.disconnect(client_id)
 
     async def send_error(
         self,
@@ -131,7 +139,11 @@ class ConnectionManager:
                     "details": details or {},
                 },
             }
-            await self.active_connections[client_id].send_json(message)
+            try:
+                await self.active_connections[client_id].send_json(message)
+            except Exception:
+                # Connection dead, remove it
+                await self.disconnect(client_id)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         """Broadcast message to all connected clients.
