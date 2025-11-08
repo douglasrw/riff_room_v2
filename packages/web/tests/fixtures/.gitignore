@@ -1,0 +1,5 @@
+# Generated test audio files
+*.wav
+
+# Keep only the MP3 and generation script
+!generate-test-audio.py

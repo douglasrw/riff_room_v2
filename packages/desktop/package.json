@@ -13,10 +13,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.8.6",
+    "@types/wait-on": "^5.3.4",
+    "concurrently": "^9.0.1",
     "electron": "^33.0.2",
     "electron-builder": "^25.1.7",
     "typescript": "^5.6.3",
-    "concurrently": "^9.0.1"
+    "wait-on": "^9.0.1"
   },
   "build": {
     "appId": "com.riffroom.app",
@@ -31,13 +33,22 @@
     },
     "mac": {
       "category": "public.app-category.music",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Audio"
     }
   }
