@@ -97,15 +97,32 @@ riff_room_v2/
    ```
 
 4. **Start development servers**
+
+   **Option A: All services (recommended)**
    ```bash
    # From project root
    pnpm dev
    ```
 
-   This starts:
+   **Option B: Backend only with health checks**
+   ```bash
+   cd packages/backend
+   ./start-backend.sh
+   ```
+
+   The backend startup script:
+   - ✓ Checks prerequisites (uv, Python version)
+   - ✓ Creates .env from .env.example if needed
+   - ✓ Verifies cache directory access
+   - ✓ Detects port conflicts
+   - ✓ Waits for backend to be healthy
+   - ✓ Shows detailed system status
+
+   **Services**:
    - **Web frontend**: http://localhost:5173
    - **Backend API**: http://localhost:8007
    - **API docs**: http://localhost:8007/docs (FastAPI Swagger UI)
+   - **Health check**: http://localhost:8007/health (comprehensive diagnostics)
 
 5. **Verify setup**
    - Open http://localhost:5173
@@ -185,12 +202,28 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 | `GET` | `/api/achievements` | List unlocked achievements |
 | `POST` | `/api/achievements` | Unlock achievement |
 
-### Health
+### Health & Monitoring
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Comprehensive health check (Demucs, DB, cache, system resources) |
+| `GET` | `/health/live` | Lightweight liveness probe (always 200 if running) |
+| `GET` | `/health/ready` | Readiness probe (200 only if ready to process) |
 | `GET` | `/docs` | OpenAPI documentation |
+
+**Health Check Response**:
+```json
+{
+  "status": "healthy",  // "healthy", "degraded", "unhealthy"
+  "timestamp": 1699564800.0,
+  "checks": {
+    "demucs": { "status": "pass", "device": "cpu", "torch_version": "2.2.0" },
+    "database": { "status": "pass", "database_path": "~/.riffroom/riffroom.db" },
+    "cache": { "status": "pass", "writable": true, "total_size_bytes": 12345 },
+    "system": { "status": "pass", "cpu_percent": 15.2, "memory_percent": 45.0 }
+  }
+}
+```
 
 **Full API docs**: http://localhost:8007/docs (when backend is running)
 

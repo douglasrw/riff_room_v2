@@ -4,16 +4,19 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import torch
 from decouple import Config as DecoupleConfig
 from decouple import RepositoryEnv
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session
 
 from app.api import routes
 from app.api import streak_routes
+from app.api import health
 from app.api.websocket import websocket_endpoint
 from app.core.logging_config import get_logger, setup_logging
-from app.database import create_db_and_tables
+from app.database import DB_PATH, create_db_and_tables
 
 # Initialize decouple config
 decouple_config = DecoupleConfig(RepositoryEnv(".env"))
@@ -91,12 +94,23 @@ app.add_middleware(
 # Include API routes
 app.include_router(routes.router, prefix="/api", tags=["processing"])
 app.include_router(streak_routes.router, prefix="/api", tags=["streaks"])
+app.include_router(health.router, tags=["health"])
 
 
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "healthy"}
+# Legacy health endpoint - redirects to new comprehensive health check
+# Kept for backward compatibility
+@app.get("/health/detailed")
+async def health_check_detailed() -> dict[str, object]:
+    """
+    Legacy detailed health check endpoint.
+
+    DEPRECATED: Use /health instead for comprehensive health checks.
+    This endpoint is maintained for backward compatibility.
+    """
+    from app.api.health import health_check
+
+    result = await health_check()
+    return result.model_dump()
 
 
 @app.websocket("/ws/{client_id}")
