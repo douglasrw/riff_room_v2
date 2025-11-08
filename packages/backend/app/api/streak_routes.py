@@ -32,10 +32,8 @@ def create_session(
     db: Annotated[Session, Depends(get_session)],
 ) -> PracticeSession:
     """Record a new practice session."""
-    # Create session
-    db_session = PracticeSession.model_validate(session_data)
-    if db_session.started_at is None:
-        db_session.started_at = datetime.now(UTC)
+    # Create session from input data
+    db_session = PracticeSession(**session_data.model_dump())
 
     db.add(db_session)
     db.commit()
@@ -91,10 +89,14 @@ def get_streak(
     db: Annotated[Session, Depends(get_session)],
     streak_date: date,
 ) -> Streak:
-    """Get streak record for a specific date."""
+    """Get streak record for a specific date (auto-creates if missing)."""
     streak = db.get(Streak, streak_date)
     if not streak:
-        raise HTTPException(status_code=404, detail="Streak not found for this date")
+        # Auto-create with defaults
+        streak = Streak(date=streak_date)
+        db.add(streak)
+        db.commit()
+        db.refresh(streak)
     return streak
 
 
@@ -119,10 +121,13 @@ def update_streak(
         streak.practice_time_seconds += streak_update.practice_time_seconds
 
     if streak_update.songs_practiced is not None:
-        streak.songs_practiced += streak_update.songs_practiced
+        # Merge song lists and deduplicate
+        existing_songs = set(streak.songs_practiced)
+        new_songs = set(streak_update.songs_practiced)
+        streak.songs_practiced = list(existing_songs | new_songs)
 
-    if streak_update.sessions_count is not None:
-        streak.sessions_count += streak_update.sessions_count
+    # Increment session count
+    streak.session_count += 1
 
     db.commit()
     db.refresh(streak)
@@ -164,9 +169,7 @@ def create_achievement(
         )
 
     # Create new achievement
-    achievement = Achievement.model_validate(achievement_data)
-    if achievement.achieved_at is None:
-        achievement.achieved_at = datetime.now(UTC)
+    achievement = Achievement(**achievement_data.model_dump())
 
     db.add(achievement)
     db.commit()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
@@ -12,7 +12,14 @@ def utc_now() -> datetime:
     """Get current UTC time as timezone-aware datetime."""
     return datetime.now(UTC)
 
-StemType = Literal["drums", "bass", "other", "vocals"]
+
+class StemType(str, Enum):
+    """Stem types for separated audio."""
+
+    DRUMS = "drums"
+    BASS = "bass"
+    OTHER = "other"
+    VOCALS = "vocals"
 
 
 class Stem(SQLModel, table=True):

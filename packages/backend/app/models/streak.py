@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date as Date
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -12,24 +13,25 @@ class Streak(SQLModel, table=True):
 
     __tablename__ = "streaks"  # type: ignore[assignment]
 
-    date: date = Field(primary_key=True)
+    date: Date = Field(primary_key=True)
     practice_time_seconds: int = Field(default=0)
-    songs_practiced: int = Field(default=0)
-    sessions_count: int = Field(default=0)
+    songs_practiced: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON)
+    )
+    session_count: int = Field(default=0)
 
 
 class StreakCreate(SQLModel):
     """Schema for creating a new streak record."""
 
-    date: date
+    date: Date
     practice_time_seconds: int = 0
-    songs_practiced: int = 0
-    sessions_count: int = 0
+    songs_practiced: list[str] = []
+    session_count: int = 0
 
 
 class StreakUpdate(SQLModel):
     """Schema for updating a streak record."""
 
     practice_time_seconds: int | None = None
-    songs_practiced: int | None = None
-    sessions_count: int | None = None
+    songs_practiced: list[str] | None = None

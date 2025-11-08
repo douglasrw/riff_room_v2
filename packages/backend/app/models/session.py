@@ -18,7 +18,7 @@ class Session(SQLModel, table=True):
     __tablename__ = "sessions"  # type: ignore[assignment]
 
     id: int | None = Field(default=None, primary_key=True)
-    song_id: int = Field(foreign_key="songs.id", index=True)
+    song_id: int | None = Field(default=None, foreign_key="songs.id", index=True)
     started_at: datetime = Field(default_factory=utc_now, index=True)
     ended_at: datetime | None = Field(default=None)
     duration_seconds: int | None = Field(default=None)
@@ -31,7 +31,7 @@ class Session(SQLModel, table=True):
 class SessionCreate(SQLModel):
     """Schema for creating a new session."""
 
-    song_id: int
+    song_id: int | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
     duration_seconds: int | None = None
