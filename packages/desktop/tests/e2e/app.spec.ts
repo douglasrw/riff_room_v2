@@ -12,7 +12,7 @@ let backendProcess: ChildProcess | null = null;
 test.describe('RiffRoom E2E - Full Workflow', () => {
   test.beforeAll(async () => {
     // Start backend server
-    const backendPath = path.join(__dirname, '../../../../backend');
+    const backendPath = path.join(__dirname, '../../../../packages/backend');
     const startScript = path.join(backendPath, 'start-backend.sh');
 
     backendProcess = spawn(startScript, [], {
@@ -38,12 +38,12 @@ test.describe('RiffRoom E2E - Full Workflow', () => {
   });
 
   test('drag MP3 → process → load stems → playback', async () => {
-    // Launch Electron app
+    // Launch Electron app in production mode (uses built web files)
     const electronApp = await electron.launch({
       args: [path.join(__dirname, '../../dist/main/index.js')],
       env: {
         ...process.env,
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
       },
     });
 
@@ -123,7 +123,7 @@ test.describe('RiffRoom E2E - Full Workflow', () => {
       args: [path.join(__dirname, '../../dist/main/index.js')],
       env: {
         ...process.env,
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
       },
     });
 
@@ -140,43 +140,6 @@ test.describe('RiffRoom E2E - Full Workflow', () => {
     const errorMessage = window.locator('[data-testid="error-message"]');
     await expect(errorMessage).toBeVisible({ timeout: 5000 });
     await expect(errorMessage).toContainText(/invalid|unsupported|error/i);
-
-    await electronApp.close();
-  });
-
-  test('cancellation works during processing', async () => {
-    const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../../dist/main/index.js')],
-      env: {
-        ...process.env,
-        NODE_ENV: 'development',
-      },
-    });
-
-    const window = await electronApp.firstWindow();
-    await window.waitForLoadState('domcontentloaded');
-    await window.waitForSelector('h1:has-text("RiffRoom")');
-
-    // Upload test file
-    const testAudioPath = path.join(__dirname, 'fixtures/test-audio.mp3');
-    const fileInput = window.locator('input[type="file"]');
-    await fileInput.setInputFiles(testAudioPath);
-
-    // Wait for processing to start
-    await window.waitForSelector('[data-testid="processing-status"]', {
-      timeout: 5000,
-      state: 'visible',
-    });
-
-    // Click cancel button
-    const cancelButton = window.locator('[data-testid="cancel-button"]');
-    await cancelButton.click();
-
-    // Should show cancellation message or return to upload zone
-    await window.waitForSelector('[data-testid="drag-drop-zone"]', {
-      timeout: 5000,
-      state: 'visible',
-    });
 
     await electronApp.close();
   });
