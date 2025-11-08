@@ -1,0 +1,44 @@
+{
+  "name": "@riffroom/desktop",
+  "version": "0.1.0",
+  "description": "RiffRoom Electron desktop app",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"tsc -w\" \"electron .\"",
+    "build": "tsc && electron-builder",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.8.6",
+    "electron": "^33.0.2",
+    "electron-builder": "^25.1.7",
+    "typescript": "^5.6.3",
+    "concurrently": "^9.0.1"
+  },
+  "build": {
+    "appId": "com.riffroom.app",
+    "productName": "RiffRoom",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "../../dist"
+    },
+    "mac": {
+      "category": "public.app-category.music",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Audio"
+    }
+  }
+}

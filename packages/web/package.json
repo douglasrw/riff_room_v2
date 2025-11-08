@@ -1,0 +1,40 @@
+{
+  "name": "@riffroom/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@tanstack/react-query": "^5.59.0",
+    "zustand": "^4.5.5",
+    "react-hook-form": "^7.53.0",
+    "react-hotkeys-hook": "^4.5.1",
+    "react-dropzone": "^14.2.10",
+    "tone": "^15.0.4",
+    "wavesurfer.js": "^7.8.6",
+    "lucide-react": "^0.447.0",
+    "framer-motion": "^11.11.7",
+    "date-fns": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.9",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-slider": "^1.2.1",
+    "@radix-ui/react-toast": "^1.2.2"
+  }
+}
