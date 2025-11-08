@@ -17,6 +17,7 @@ from app.api import health
 from app.api.websocket import websocket_endpoint
 from app.core.logging_config import get_logger, setup_logging
 from app.database import DB_PATH, create_db_and_tables
+from app.middleware import SecurityHeadersMiddleware
 
 # Initialize decouple config
 decouple_config = DecoupleConfig(RepositoryEnv(".env"))
@@ -80,6 +81,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Security middleware (MUST be before CORS)
+# Adds CSP, X-Frame-Options, and other security headers
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS middleware
 # FIXED M6: Use configurable origins instead of hardcoded values

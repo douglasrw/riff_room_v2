@@ -102,10 +102,19 @@ async def process_audio(
     client_id = str(uuid.uuid4())
     logger.info(f"Upload received: {file.filename} ({len(content)} bytes) → {client_id}")
 
+    # SECURITY FIX: Sanitize filename to prevent path traversal attacks (CWE-22)
+    # Extract only the filename component and extension, discarding any path
+    safe_filename = Path(file.filename or "upload").name
+    # Further sanitize: keep only the extension, use client_id for uniqueness
+    file_ext = Path(safe_filename).suffix or ".tmp"
+    sanitized_name = f"{client_id}{file_ext}"
+
     # Save uploaded file temporarily
     temp_dir = Path(tempfile.gettempdir()) / "riffroom"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / f"{client_id}_{file.filename}"
+    temp_path = temp_dir / sanitized_name
+
+    logger.debug(f"Sanitized filename: {file.filename} → {sanitized_name}")
 
     try:
         # Save upload (async to avoid blocking event loop)
