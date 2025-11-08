@@ -182,17 +182,20 @@ class DemucsProcessor:
 
         loop = asyncio.get_event_loop()
 
-        for stem_name, tensor in stems.items():
-            output_path = cache_path / f"{stem_name}.wav"
-
-            # Save in thread pool (I/O intensive)
-            await loop.run_in_executor(
+        # FIXED H5: Save all stems in parallel instead of sequentially
+        # Sequential: 4 stems × save_time = total time
+        # Parallel: max(save_times) ≈ 4× faster
+        save_tasks = [
+            loop.run_in_executor(
                 None,
                 torchaudio.save,
-                str(output_path),
+                str(cache_path / f"{stem_name}.wav"),
                 tensor,
                 44100,  # Sample rate
             )
+            for stem_name, tensor in stems.items()
+        ]
+        await asyncio.gather(*save_tasks)
 
         # FIXED: Clean up tensors to prevent memory leak
         # Explicitly release PyTorch tensors to free GPU/CPU memory
