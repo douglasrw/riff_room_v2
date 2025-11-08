@@ -1,0 +1,132 @@
+name: E2E Tests
+
+on:
+  # Run on push to main
+  push:
+    branches: [main]
+  # Run on PRs
+  pull_request:
+    branches: [main]
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run nightly
+  schedule:
+    - cron: '0 2 * * *' # 2 AM UTC daily
+
+jobs:
+  e2e-tests:
+    name: E2E Tests - ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python dependencies
+        run: |
+          cd packages/backend
+          uv sync
+
+      - name: Install Playwright browsers
+        run: |
+          cd packages/web
+          npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Generate test fixtures
+        run: |
+          cd packages/web
+          npm run setup:test-fixtures
+
+      - name: Start backend server
+        run: |
+          cd packages/backend
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8007 &
+          echo "BACKEND_PID=$!" >> $GITHUB_ENV
+        env:
+          DEBUG: false
+          LOG_LEVEL: INFO
+
+      - name: Wait for backend to be ready
+        run: |
+          echo "Waiting for backend health check..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8007/health/ready; then
+              echo "Backend is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30 failed, waiting 2s..."
+            sleep 2
+          done
+          echo "Backend failed to start"
+          exit 1
+
+      - name: Run E2E tests
+        run: |
+          cd packages/web
+          npx playwright test --project=${{ matrix.browser }}
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ matrix.browser }}
+          path: |
+            packages/web/playwright-report/
+            packages/web/test-results/
+          retention-days: 7
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.browser }}
+          path: packages/web/test-results/**/*.zip
+          retention-days: 7
+
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -n "$BACKEND_PID" ]; then
+            kill $BACKEND_PID || true
+          fi

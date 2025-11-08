@@ -21,7 +21,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Get pnpm store directory
         shell: bash
@@ -63,17 +63,17 @@ jobs:
       - name: Install Python dependencies
         run: |
           cd packages/backend
-          uv sync
+          uv sync --extra dev
 
       - name: Run ruff
         run: |
           cd packages/backend
-          ruff check --output-format=github app/
+          uv run ruff check --output-format=github app/
 
-      - name: Run type checker
+      - name: Run type checker (pyright)
         run: |
           cd packages/backend
-          uvx ty check app/
+          uv run pyright app/
 
   test:
     name: Test
@@ -95,7 +95,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Install uv
         run: pip install uv
@@ -106,7 +106,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           cd packages/backend
-          uv sync
+          uv sync --extra dev
 
       - name: Run web tests
         run: |
@@ -116,7 +116,29 @@ jobs:
       - name: Run backend tests
         run: |
           cd packages/backend
-          pytest -v
+          uv run pytest -v --cov=app --cov-report=term-missing
+
+      - name: Test backend health check
+        run: |
+          cd packages/backend
+          # Start backend in background
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8007 &
+          BACKEND_PID=$!
+
+          # Wait for health check
+          echo "Waiting for backend to be ready..."
+          for i in {1..15}; do
+            if curl -f http://localhost:8007/health/ready 2>/dev/null; then
+              echo "✓ Backend health check passed"
+              kill $BACKEND_PID
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "✗ Backend health check failed"
+          kill $BACKEND_PID || true
+          exit 1
 
   build:
     name: Build
@@ -133,7 +155,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
