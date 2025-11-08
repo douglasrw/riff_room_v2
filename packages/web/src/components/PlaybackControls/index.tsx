@@ -8,6 +8,7 @@ export const PlaybackControls = () => {
     playbackSpeed,
     mutedStems,
     activeSoloStem,
+    isLoadingStems,
     togglePlay,
     setSpeed,
     setSoloStem,
@@ -27,11 +28,22 @@ export const PlaybackControls = () => {
 
   return (
     <div className="bg-gray-800 p-6 rounded-lg space-y-6">
+      {/* Loading indicator */}
+      {isLoadingStems && (
+        <div className="text-center py-2">
+          <div className="inline-flex items-center gap-2 text-indigo-400">
+            <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm">Loading stems...</span>
+          </div>
+        </div>
+      )}
+
       {/* Main playback controls */}
       <div className="flex items-center justify-center gap-4">
         <button
           onClick={() => skipBackward(5)}
-          className="p-3 hover:bg-gray-700 rounded-full transition-colors"
+          disabled={isLoadingStems}
+          className="p-3 hover:bg-gray-700 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           title="Skip back 5s"
         >
           <SkipBack className="w-5 h-5" />
@@ -39,7 +51,8 @@ export const PlaybackControls = () => {
 
         <button
           onClick={togglePlay}
-          className="p-4 bg-indigo-500 hover:bg-indigo-600 rounded-full transition-colors"
+          disabled={isLoadingStems}
+          className="p-4 bg-indigo-500 hover:bg-indigo-600 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           title={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -51,7 +64,8 @@ export const PlaybackControls = () => {
 
         <button
           onClick={() => skipForward(5)}
-          className="p-3 hover:bg-gray-700 rounded-full transition-colors"
+          disabled={isLoadingStems}
+          className="p-3 hover:bg-gray-700 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           title="Skip forward 5s"
         >
           <SkipForward className="w-5 h-5" />
@@ -66,8 +80,9 @@ export const PlaybackControls = () => {
             <button
               key={speed}
               onClick={() => setSpeed(speed)}
+              disabled={isLoadingStems}
               className={`
-                px-3 py-1 rounded text-sm transition-colors
+                px-3 py-1 rounded text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed
                 ${playbackSpeed === speed
                   ? 'bg-indigo-500 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -101,12 +116,14 @@ export const PlaybackControls = () => {
                     setSoloStem(isSolo ? null : type);
                   }
                 }}
+                disabled={isLoadingStems}
                 className={`
-                  relative p-3 rounded-lg transition-all
+                  relative p-3 rounded-lg transition-all disabled:cursor-not-allowed
                   ${isSolo ? `${color} text-white shadow-lg scale-105` : ''}
                   ${isMuted ? 'bg-gray-700/50 opacity-40' : ''}
                   ${!isSolo && !isMuted && !isInactive ? 'bg-gray-700 hover:bg-gray-600' : ''}
                   ${isInactive ? 'bg-gray-700/30 opacity-50' : ''}
+                  ${isLoadingStems ? 'opacity-40' : ''}
                 `}
                 title={`${label} (1-4 to solo, Shift+1-4 to mute)`}
               >

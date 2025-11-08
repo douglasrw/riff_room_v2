@@ -18,6 +18,10 @@ class ProcessingError(Exception):
     """Exception raised when stem separation fails."""
 
 
+class CancellationError(Exception):
+    """Exception raised when processing is cancelled."""
+
+
 class DemucsProcessor:
     """Handle audio stem separation using Demucs ML model."""
 
@@ -44,18 +48,21 @@ class DemucsProcessor:
         self,
         audio_path: Path,
         progress_callback: Callable[[float, str], None] | None = None,
+        cancellation_event: asyncio.Event | None = None,
     ) -> dict[str, Path]:
         """Process audio file into 4 stems.
 
         Args:
             audio_path: Path to input audio file
             progress_callback: Optional callback for progress updates (progress, status)
+            cancellation_event: Optional event to signal cancellation
 
         Returns:
             Dictionary mapping stem type to output file path
 
         Raises:
             ProcessingError: If stem separation fails
+            CancellationError: If processing is cancelled
         """
         # Generate cache key from file hash
         file_hash = await self._get_file_hash(audio_path)
@@ -68,10 +75,18 @@ class DemucsProcessor:
                 progress_callback(100.0, "Loaded from cache")
             return self._get_stem_paths(cache_path)
 
+        # Check for cancellation before starting expensive operation
+        if cancellation_event and cancellation_event.is_set():
+            raise CancellationError("Processing cancelled before starting")
+
         # Process with Demucs
         try:
             if progress_callback:
                 progress_callback(10.0, "Loading audio file...")
+
+            # Check cancellation
+            if cancellation_event and cancellation_event.is_set():
+                raise CancellationError("Processing cancelled during load")
 
             # Run separation in thread pool (Demucs is CPU/GPU intensive)
             loop = asyncio.get_event_loop()
@@ -79,11 +94,25 @@ class DemucsProcessor:
             if progress_callback:
                 progress_callback(20.0, "Running stem separation...")
 
+            # Check cancellation before expensive ML operation
+            if cancellation_event and cancellation_event.is_set():
+                raise CancellationError("Processing cancelled before separation")
+
             stems = await loop.run_in_executor(
                 None,
                 self._run_separation,
                 audio_path,
             )
+
+            # Check cancellation after separation
+            if cancellation_event and cancellation_event.is_set():
+                # Clean up tensors before raising
+                for tensor in stems.values():
+                    del tensor
+                stems.clear()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                raise CancellationError("Processing cancelled after separation")
 
             if progress_callback:
                 progress_callback(80.0, "Saving stems...")
@@ -96,6 +125,9 @@ class DemucsProcessor:
 
             return self._get_stem_paths(cache_path)
 
+        except CancellationError:
+            # Re-raise cancellation as-is
+            raise
         except Exception as e:
             error_msg = f"Stem separation failed: {e}"
             raise ProcessingError(error_msg) from e

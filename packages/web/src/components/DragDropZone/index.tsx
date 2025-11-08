@@ -2,12 +2,15 @@ import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload } from 'lucide-react';
 import { useStemProcessor } from '../../hooks/useStemProcessor';
+import { useAudioStore } from '../../stores/audioStore';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (matches backend limit)
 
 export const DragDropZone = () => {
   // FIXED N4: Get error state to display to user
   const { processSong, isProcessing, progress, error: processingError } = useStemProcessor();
+  // FIXED N6: Get audio loading state
+  const isLoadingStems = useAudioStore((s) => s.isLoadingStems);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const onDrop = useCallback(async (files: File[]) => {
@@ -48,7 +51,8 @@ export const DragDropZone = () => {
       'audio/x-m4a': ['.m4a'],
     },
     maxFiles: 1,
-    disabled: isProcessing,
+    // FIXED N6: Also disable during audio loading
+    disabled: isProcessing || isLoadingStems,
   });
 
   return (
@@ -61,13 +65,23 @@ export const DragDropZone = () => {
           ? 'border-indigo-500 bg-indigo-500/10 scale-105'
           : 'border-gray-600 hover:border-indigo-400 hover:bg-indigo-400/5'
         }
-        ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
+        ${isProcessing || isLoadingStems ? 'opacity-50 cursor-not-allowed' : ''}
       `}
     >
       <input {...getInputProps()} />
 
-      {/* FIXED N4: Display error message to user */}
-      {error ? (
+      {/* FIXED N6: Show audio loading state */}
+      {isLoadingStems ? (
+        <div className="space-y-4">
+          <div className="flex justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-medium">Loading audio...</p>
+            <p className="text-sm text-gray-400">Preparing stems for playback</p>
+          </div>
+        </div>
+      ) : /* FIXED N4: Display error message to user */ error ? (
         <div className="space-y-4">
           <div className="flex justify-center">
             <div className="p-4 bg-red-500/20 rounded-full">

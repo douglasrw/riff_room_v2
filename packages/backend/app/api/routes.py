@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.websocket import manager
-from app.core.demucs_processor import DemucsProcessor, ProcessingError
+from app.core.demucs_processor import CancellationError, DemucsProcessor, ProcessingError
 
 router = APIRouter()
 
@@ -22,6 +22,9 @@ processor: DemucsProcessor | None = None
 
 # Track background processing tasks
 _processing_tasks: set[asyncio.Task] = set()
+
+# Track cancellation events by client_id (FIXED M4)
+_cancellation_events: dict[str, asyncio.Event] = {}
 
 # Max file size: 100MB
 MAX_FILE_SIZE = 100 * 1024 * 1024
@@ -118,16 +121,26 @@ async def process_audio(
                 detail=f"Invalid audio file: {validation_error}",
             ) from validation_error
 
+        # FIXED M4: Create cancellation event for this processing task
+        cancellation_event = asyncio.Event()
+        _cancellation_events[client_id] = cancellation_event
+
         # Process in background task and track it
         task = asyncio.create_task(
             _process_with_progress(
                 processor,
                 temp_path,
                 client_id,
+                cancellation_event,
             )
         )
         _processing_tasks.add(task)
-        task.add_done_callback(_processing_tasks.discard)
+
+        def cleanup_task(t: asyncio.Task) -> None:
+            _processing_tasks.discard(t)
+            _cancellation_events.pop(client_id, None)
+
+        task.add_done_callback(cleanup_task)
 
         return ProcessResponse(
             client_id=client_id,
@@ -142,6 +155,38 @@ async def process_audio(
         if temp_path.exists():
             temp_path.unlink()
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/cancel/{client_id}")
+async def cancel_processing(client_id: str) -> dict[str, str]:
+    """Cancel ongoing stem processing.
+
+    FIXED M4: Allow clients to cancel expensive processing operations.
+
+    Args:
+        client_id: Client ID to cancel
+
+    Returns:
+        Cancellation status message
+
+    Raises:
+        HTTPException: If client_id not found or already completed
+    """
+    event = _cancellation_events.get(client_id)
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No active processing found for this client_id. Either already completed or invalid ID."
+        )
+
+    # Signal cancellation
+    event.set()
+
+    return {
+        "status": "cancelled",
+        "client_id": client_id,
+        "message": "Processing cancellation requested. Cleanup in progress."
+    }
 
 
 @router.get("/stems/{client_id}", response_model=StemsResponse)
@@ -175,6 +220,7 @@ async def _process_with_progress(
     proc: DemucsProcessor,
     audio_path: Path,
     client_id: str,
+    cancellation_event: asyncio.Event,
 ) -> None:
     """Process audio with WebSocket progress updates.
 
@@ -182,6 +228,7 @@ async def _process_with_progress(
         proc: Demucs processor instance
         audio_path: Path to audio file
         client_id: WebSocket client ID
+        cancellation_event: Event to signal cancellation
     """
     # FIXED: Get event loop for thread-safe task scheduling
     loop = asyncio.get_running_loop()
@@ -199,10 +246,11 @@ async def _process_with_progress(
         )
 
     try:
-        # Process stems
+        # Process stems with cancellation support (FIXED M4)
         stems = await proc.process_song(
             audio_path,
             progress_callback=progress_callback,
+            cancellation_event=cancellation_event,
         )
 
         # Send completion
@@ -214,6 +262,13 @@ async def _process_with_progress(
                     for name, path in stems.items()
                 },
             },
+        )
+
+    except CancellationError as e:
+        # FIXED M4: Send cancellation notice to client
+        await manager.send_error(
+            client_id,
+            f"Processing cancelled: {e}",
         )
 
     except ProcessingError as e:

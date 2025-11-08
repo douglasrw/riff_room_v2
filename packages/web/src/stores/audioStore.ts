@@ -27,6 +27,7 @@ interface AudioStore {
 
   // UI state
   showShortcuts: boolean;
+  isLoadingStems: boolean;
 
   // Actions
   loadSong: (song: Song) => Promise<void>;
@@ -80,15 +81,22 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     masterVolume: 1.0,
     currentSong: null,
     showShortcuts: false,
+    isLoadingStems: false,
 
     // Engine reference
     _engine: audioEngine,
 
     // Actions
     loadSong: async (song: Song) => {
-      set({ currentSong: song });
-      // FIXED: Pass songId to enable caching
-      await audioEngine.loadStems(song.stems, song.id);
+      set({ currentSong: song, isLoadingStems: true });
+      try {
+        // FIXED: Pass songId to enable caching
+        await audioEngine.loadStems(song.stems, song.id);
+        set({ isLoadingStems: false });
+      } catch (error) {
+        set({ isLoadingStems: false });
+        throw error;
+      }
     },
 
     togglePlay: async () => {
