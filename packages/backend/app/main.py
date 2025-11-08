@@ -10,7 +10,9 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import routes
+from app.api import streak_routes
 from app.api.websocket import websocket_endpoint
+from app.database import create_db_and_tables
 
 # Initialize decouple config
 decouple_config = DecoupleConfig(RepositoryEnv(".env"))
@@ -31,6 +33,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan - setup and teardown."""
     # Startup
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Initialize database tables
+    create_db_and_tables()
 
     # Initialize Demucs processor
     routes.initialize_processor(CACHE_DIR)
@@ -60,6 +65,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(routes.router, prefix="/api", tags=["processing"])
+app.include_router(streak_routes.router, prefix="/api", tags=["streaks"])
 
 
 @app.get("/health")

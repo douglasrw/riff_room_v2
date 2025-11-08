@@ -1,18 +1,30 @@
 import { Flame } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { streakService } from '../../services/streakService';
 
 export const StreakIndicator = () => {
   const [streak, setStreak] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch from streak service when backend is ready
-    // For now, use localStorage for demo
-    const savedStreak = localStorage.getItem('practice-streak');
-    if (savedStreak) {
-      setStreak(parseInt(savedStreak, 10));
-    }
-    setIsLoading(false);
+    // FIXED: Fetch from backend streak service
+    const fetchStreak = async () => {
+      try {
+        const currentStreak = await streakService.getCurrentStreak();
+        setStreak(currentStreak);
+      } catch (error) {
+        console.error('Failed to fetch streak:', error);
+        // Fallback to localStorage for offline support
+        const savedStreak = localStorage.getItem('practice-streak');
+        if (savedStreak) {
+          setStreak(parseInt(savedStreak, 10));
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStreak();
   }, []);
 
   if (isLoading) return null;

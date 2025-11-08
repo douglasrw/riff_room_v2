@@ -12,9 +12,10 @@ __pycache__/
 dist/
 build/
 
-# Environment
+# Environment variables (but keep .env.example files)
 .env
 .env.local
+!.env.example
 
 # Electron
 packages/desktop/dist/

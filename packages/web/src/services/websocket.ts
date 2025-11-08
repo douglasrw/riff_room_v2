@@ -2,6 +2,16 @@
  * WebSocket service for real-time communication with backend
  */
 
+/**
+ * Get WebSocket URL from API URL environment variable.
+ * Converts http/https to ws/wss and defaults to localhost for development.
+ */
+const getDefaultWsUrl = (): string => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8007';
+  // Convert http → ws, https → wss
+  return apiUrl.replace(/^http/, 'ws');
+};
+
 export interface WebSocketMessage {
   type: 'progress' | 'complete' | 'error' | 'pong';
   data: any;
@@ -29,9 +39,11 @@ export class WebSocketService {
   private errorHandlers: Set<ErrorHandler> = new Set();
   private closeHandlers: Set<CloseHandler> = new Set();
 
-  constructor(clientId: string, baseUrl = 'ws://localhost:8007') {
+  constructor(clientId: string, baseUrl?: string) {
     this.clientId = clientId;
-    this.url = `${baseUrl}/ws/${clientId}`;
+    // FIXED N7: Use environment variable instead of hardcoded URL
+    const wsUrl = baseUrl || getDefaultWsUrl();
+    this.url = `${wsUrl}/ws/${clientId}`;
   }
 
   /**

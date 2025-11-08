@@ -40,8 +40,9 @@ export interface WeeklyStats {
 export class StreakService {
   private apiBaseUrl: string;
 
-  constructor(apiBaseUrl: string = 'http://localhost:8007') {
-    this.apiBaseUrl = apiBaseUrl;
+  constructor(apiBaseUrl?: string) {
+    // FIXED: Use environment variable instead of hardcoded URL
+    this.apiBaseUrl = apiBaseUrl || import.meta.env.VITE_API_URL || 'http://localhost:8007';
   }
 
   /**
@@ -201,14 +202,14 @@ export class StreakService {
   private notifyAchievement(type: string): void {
     const messages: Record<string, string> = {
       streak_7: '=% 7-day streak! You\'re on fire!',
-      streak_30: '¡ 30-day streak! Legendary dedication!',
-      streak_100: '<Æ 100-day streak! You\'re unstoppable!',
-      songs_10: '<µ 10 songs mastered!',
-      songs_50: '<¸ 50 songs mastered! Rock star status!',
+      streak_30: 'ï¿½ 30-day streak! Legendary dedication!',
+      streak_100: '<ï¿½ 100-day streak! You\'re unstoppable!',
+      songs_10: '<ï¿½ 10 songs mastered!',
+      songs_50: '<ï¿½ 50 songs mastered! Rock star status!',
       songs_100: '< 100 songs! Musical legend!',
-      hours_10: 'ð 10 hours of practice!',
-      hours_50: '=ª 50 hours! Serious dedication!',
-      hours_100: '<Å 100 hours! Elite musician!',
+      hours_10: 'ï¿½ 10 hours of practice!',
+      hours_50: '=ï¿½ 50 hours! Serious dedication!',
+      hours_100: '<ï¿½ 100 hours! Elite musician!',
     };
 
     const message = messages[type] || 'Achievement unlocked!';
