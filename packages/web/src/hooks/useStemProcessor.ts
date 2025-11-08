@@ -24,6 +24,8 @@ export const useStemProcessor = () => {
   const wsRef = useRef<WebSocketService | null>(null);
   const stemUrlsRef = useRef<string[]>([]);
   const currentFileRef = useRef<string | null>(null);
+  // FIXED C6: Track client_id for cancellation
+  const clientIdRef = useRef<string | null>(null);
 
   // FIXED N5: Check for resumable session on mount
   useEffect(() => {
@@ -88,6 +90,8 @@ export const useStemProcessor = () => {
       // FIXED N5: Store client_id for resume capability
       storeProcessingSession(client_id);
       currentFileRef.current = file.name;
+      // FIXED C6: Store for cancellation
+      clientIdRef.current = client_id;
 
       // Connect to WebSocket for progress updates
       // FIXED N7: WebSocketService now reads from env var, no need to pass URL
@@ -193,6 +197,8 @@ export const useStemProcessor = () => {
       // Reconnect to existing WebSocket session
       const ws = new WebSocketService(session.clientId);
       wsRef.current = ws;
+      // FIXED C6: Store for cancellation
+      clientIdRef.current = session.clientId;
 
       // Handle progress updates (same as processSong)
       ws.onMessage((message) => {
@@ -261,9 +267,68 @@ export const useStemProcessor = () => {
     }
   }, [loadSong]);
 
+  // FIXED C6: Add cancellation API
+  const cancelProcessing = useCallback(async () => {
+    const clientId = clientIdRef.current;
+    if (!clientId) {
+      console.warn('No active processing to cancel');
+      return;
+    }
+
+    try {
+      // Call backend cancel endpoint
+      const response = await fetch(`${API_URL}/api/cancel/${clientId}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        console.error('Cancel request failed:', response.status);
+      }
+
+      // Disconnect WebSocket
+      if (wsRef.current) {
+        wsRef.current.disconnect();
+        wsRef.current = null;
+      }
+
+      // Cleanup state
+      setState({
+        isProcessing: false,
+        progress: 0,
+        error: null,
+        canResume: false,
+      });
+
+      // Clear session and client_id
+      clearProcessingSession();
+      clientIdRef.current = null;
+
+      // Cleanup blob URLs
+      stemUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      stemUrlsRef.current = [];
+
+    } catch (error) {
+      console.error('Cancel processing error:', error);
+      // Still cleanup even if API call fails
+      if (wsRef.current) {
+        wsRef.current.disconnect();
+        wsRef.current = null;
+      }
+      setState({
+        isProcessing: false,
+        progress: 0,
+        error: 'Cancellation failed',
+        canResume: false,
+      });
+      clearProcessingSession();
+      clientIdRef.current = null;
+    }
+  }, []);
+
   return {
     processSong,
     resumeProcessing,
+    cancelProcessing,
     isProcessing: state.isProcessing,
     progress: state.progress,
     error: state.error,
