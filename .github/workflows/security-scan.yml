@@ -1,0 +1,142 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Mondays at 9am UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  npm-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        run: |
+          echo "Running security audit for all packages..."
+          pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Audit frontend (web)
+        working-directory: packages/web
+        run: |
+          echo "Frontend security audit:"
+          pnpm audit --audit-level=high --json > audit-web.json || true
+          cat audit-web.json
+
+      - name: Audit desktop
+        working-directory: packages/desktop
+        run: |
+          echo "Desktop security audit:"
+          pnpm audit --audit-level=high --json > audit-desktop.json || true
+          cat audit-desktop.json
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-results
+          path: |
+            packages/web/audit-web.json
+            packages/desktop/audit-desktop.json
+          retention-days: 30
+
+  python-security:
+    name: Python Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python dependencies
+        working-directory: packages/backend
+        run: |
+          uv sync --extra dev
+
+      - name: Check if safety is installed
+        id: check-safety
+        working-directory: packages/backend
+        run: |
+          if uv run which safety >/dev/null 2>&1; then
+            echo "installed=true" >> $GITHUB_OUTPUT
+          else
+            echo "installed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install safety
+        if: steps.check-safety.outputs.installed == 'false'
+        working-directory: packages/backend
+        run: |
+          uv add --dev safety
+
+      - name: Run safety check
+        working-directory: packages/backend
+        run: |
+          echo "Running Python dependency security scan..."
+          uv run safety check --json > safety-report.json || true
+          cat safety-report.json
+        continue-on-error: true
+
+      - name: Upload safety results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-safety-results
+          path: packages/backend/safety-report.json
+          retention-days: 30
+
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript', 'python']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"

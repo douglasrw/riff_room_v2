@@ -121,6 +121,40 @@ Builds desktop apps for all platforms in parallel:
 
 ---
 
+### 4. Security Scan (`security-scan.yml`)
+
+**Trigger:**
+- Push to main
+- Pull Requests to main
+- Weekly schedule (Mondays 9 AM UTC)
+
+**Jobs:**
+
+#### NPM Audit
+- Scans JavaScript/TypeScript dependencies for vulnerabilities
+- Runs audit-level=high for web and desktop packages
+- Uploads audit results as artifacts
+
+#### Python Security
+- Runs safety check on Python dependencies
+- Auto-installs safety if not present
+- Uploads safety results as artifacts
+
+#### CodeQL Analysis
+- Static code analysis for JavaScript and Python
+- Scans for security vulnerabilities and code quality issues
+- Uses GitHub's security-and-quality queries
+- Results appear in Security tab
+
+**Artifacts:**
+- NPM audit reports (JSON)
+- Python safety reports (JSON)
+- Retained for 30 days
+
+**Duration:** ~5-10 minutes
+
+---
+
 ## Running Workflows Locally
 
 ### CI Checks
@@ -178,6 +212,7 @@ Add to README.md:
 ```markdown
 [![CI](https://github.com/douglasrw/riff_room_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/douglasrw/riff_room_v2/actions/workflows/ci.yml)
 [![E2E Tests](https://github.com/douglasrw/riff_room_v2/actions/workflows/e2e.yml/badge.svg)](https://github.com/douglasrw/riff_room_v2/actions/workflows/e2e.yml)
+[![Security Scan](https://github.com/douglasrw/riff_room_v2/actions/workflows/security-scan.yml/badge.svg)](https://github.com/douglasrw/riff_room_v2/actions/workflows/security-scan.yml)
 [![Release](https://github.com/douglasrw/riff_room_v2/actions/workflows/release.yml/badge.svg)](https://github.com/douglasrw/riff_room_v2/actions/workflows/release.yml)
 ```
 
@@ -281,7 +316,7 @@ Filter by:
 ## Future Improvements
 
 Potential enhancements:
-- [ ] Add security scanning (CodeQL, Snyk)
+- [x] Add security scanning (CodeQL, npm audit, safety)
 - [ ] Add dependency update automation (Dependabot, Renovate)
 - [ ] Add performance benchmarking workflow
 - [ ] Add Docker image builds
