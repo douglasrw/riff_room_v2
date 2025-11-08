@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { WebSocketService } from '../services/websocket';
+import { storeProcessingSession, getProcessingSession, clearProcessingSession } from '../services/storage';
 
 interface StemProcessingState {
   isProcessing: boolean;
   progress: number;
   error: string | null;
+  canResume: boolean;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8007';
@@ -15,11 +17,21 @@ export const useStemProcessor = () => {
     isProcessing: false,
     progress: 0,
     error: null,
+    canResume: false,
   });
 
   const loadSong = useAudioStore((s) => s.loadSong);
   const wsRef = useRef<WebSocketService | null>(null);
   const stemUrlsRef = useRef<string[]>([]);
+  const currentFileRef = useRef<string | null>(null);
+
+  // FIXED N5: Check for resumable session on mount
+  useEffect(() => {
+    const session = getProcessingSession();
+    if (session) {
+      setState(prev => ({ ...prev, canResume: true }));
+    }
+  }, []);
 
   // FIXED N1: Cleanup object URLs and WebSocket on unmount
   useEffect(() => {
@@ -57,8 +69,13 @@ export const useStemProcessor = () => {
 
       const { client_id } = await response.json();
 
+      // FIXED N5: Store client_id for resume capability
+      storeProcessingSession(client_id);
+      currentFileRef.current = file.name;
+
       // Connect to WebSocket for progress updates
-      const ws = new WebSocketService(client_id, API_URL.replace('http', 'ws'));
+      // FIXED N7: WebSocketService now reads from env var, no need to pass URL
+      const ws = new WebSocketService(client_id);
       wsRef.current = ws;
 
       // Handle progress updates
@@ -88,8 +105,11 @@ export const useStemProcessor = () => {
             },
           };
 
-          setState({ isProcessing: false, progress: 100, error: null });
+          setState({ isProcessing: false, progress: 100, error: null, canResume: false });
           loadSong(song);
+
+          // FIXED N5: Clear processing session on success
+          clearProcessingSession();
 
           // Cleanup WebSocket
           ws.disconnect();
@@ -105,7 +125,13 @@ export const useStemProcessor = () => {
       });
 
       ws.onError(() => {
-        throw new Error('WebSocket connection failed');
+        // FIXED N5: Don't throw on WebSocket error - allow resume
+        setState(prev => ({
+          ...prev,
+          isProcessing: false,
+          error: 'Connection lost. You can resume processing.',
+          canResume: true,
+        }));
       });
 
       ws.connect();
@@ -116,7 +142,11 @@ export const useStemProcessor = () => {
         isProcessing: false,
         progress: 0,
         error: error instanceof Error ? error.message : 'Failed to process song',
+        canResume: false,
       });
+
+      // FIXED N5: Clear session on upload/API errors (not WebSocket errors)
+      clearProcessingSession();
 
       // Cleanup on error
       if (wsRef.current) {
@@ -126,10 +156,98 @@ export const useStemProcessor = () => {
     }
   }, [loadSong]);
 
+  // FIXED N5: Resume processing from stored session
+  const resumeProcessing = useCallback(() => {
+    const session = getProcessingSession();
+    if (!session) {
+      setState(prev => ({
+        ...prev,
+        error: 'No session to resume',
+        canResume: false,
+      }));
+      return;
+    }
+
+    setState({ isProcessing: true, progress: 0, error: null, canResume: false });
+
+    try {
+      // Reconnect to existing WebSocket session
+      const ws = new WebSocketService(session.clientId);
+      wsRef.current = ws;
+
+      // Handle progress updates (same as processSong)
+      ws.onMessage((message) => {
+        if (message.type === 'progress') {
+          setState(prev => ({
+            ...prev,
+            progress: message.data.progress,
+          }));
+        } else if (message.type === 'complete') {
+          const stemPaths = message.data.stems;
+          const stemUrls = Object.values(stemPaths) as string[];
+          stemUrlsRef.current = stemUrls;
+
+          const song = {
+            id: session.clientId,
+            title: currentFileRef.current || 'Resumed Song',
+            artist: 'Unknown Artist',
+            stems: {
+              drums: stemPaths.drums,
+              bass: stemPaths.bass,
+              other: stemPaths.other,
+              vocals: stemPaths.vocals,
+            },
+          };
+
+          setState({ isProcessing: false, progress: 100, error: null, canResume: false });
+          loadSong(song);
+          clearProcessingSession();
+
+          ws.disconnect();
+          wsRef.current = null;
+
+          setTimeout(() => {
+            setState(prev => ({ ...prev, progress: 0 }));
+          }, 500);
+        } else if (message.type === 'error') {
+          setState({
+            isProcessing: false,
+            progress: 0,
+            error: message.data.error || 'Processing failed',
+            canResume: false,
+          });
+          clearProcessingSession();
+        }
+      });
+
+      ws.onError(() => {
+        setState(prev => ({
+          ...prev,
+          isProcessing: false,
+          error: 'Failed to reconnect',
+          canResume: true,
+        }));
+      });
+
+      ws.connect();
+    } catch (error) {
+      console.error('Resume error:', error);
+      setState({
+        isProcessing: false,
+        progress: 0,
+        error: 'Failed to resume processing',
+        canResume: false,
+      });
+      clearProcessingSession();
+    }
+  }, [loadSong]);
+
   return {
     processSong,
+    resumeProcessing,
     isProcessing: state.isProcessing,
     progress: state.progress,
     error: state.error,
+    canResume: state.canResume,
   };
 };

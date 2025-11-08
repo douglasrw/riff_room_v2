@@ -8,7 +8,8 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (matches backend limit)
 
 export const DragDropZone = () => {
   // FIXED N4: Get error state to display to user
-  const { processSong, isProcessing, progress, error: processingError } = useStemProcessor();
+  // FIXED N5: Get resume capability
+  const { processSong, resumeProcessing, isProcessing, progress, error: processingError, canResume } = useStemProcessor();
   // FIXED N6: Get audio loading state
   const isLoadingStems = useAudioStore((s) => s.isLoadingStems);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -93,18 +94,29 @@ export const DragDropZone = () => {
               {validationError ? 'Invalid File' : 'Processing Failed'}
             </p>
             <p className="text-sm text-gray-400">{error}</p>
-            <button
-              onClick={() => {
-                setValidationError(null);
-                // For processing errors, reload is safer
-                if (processingError) {
-                  window.location.reload();
-                }
-              }}
-              className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-medium transition-colors"
-            >
-              Try Again
-            </button>
+            {/* FIXED N5: Show Resume button if processing can be resumed */}
+            <div className="flex gap-2 mt-4 justify-center">
+              {canResume && (
+                <button
+                  onClick={resumeProcessing}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
+                >
+                  Resume Processing
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setValidationError(null);
+                  // For processing errors, reload is safer
+                  if (processingError && !canResume) {
+                    window.location.reload();
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-medium transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
           </div>
         </div>
       ) : isProcessing ? (
