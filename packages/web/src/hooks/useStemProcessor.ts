@@ -50,6 +50,68 @@ export const useStemProcessor = () => {
     };
   }, []);
 
+  // FIXED H2: Extract shared WebSocket handler logic to eliminate duplication
+  const setupWebSocketHandlers = useCallback((
+    ws: WebSocketService,
+    clientId: string,
+    fileName: string
+  ) => {
+    ws.onMessage((message) => {
+      if (message.type === 'progress') {
+        setState(prev => ({
+          ...prev,
+          progress: message.data.progress,
+        }));
+      } else if (message.type === 'complete') {
+        // Processing complete, load stems
+        const stemPaths = message.data.stems;
+
+        // FIXED N3: Track URLs for cleanup
+        const stemUrls = Object.values(stemPaths) as string[];
+        stemUrlsRef.current = stemUrls;
+
+        const song = {
+          id: clientId,
+          title: fileName.replace(/\.[^/.]+$/, ''),
+          artist: 'Unknown Artist',
+          stems: {
+            drums: stemPaths.drums,
+            bass: stemPaths.bass,
+            other: stemPaths.other,
+            vocals: stemPaths.vocals,
+          },
+        };
+
+        setState({ isProcessing: false, progress: 100, error: null, canResume: false });
+        loadSong(song);
+
+        // FIXED N5: Clear processing session on success
+        clearProcessingSession();
+
+        // Cleanup WebSocket
+        ws.disconnect();
+        wsRef.current = null;
+
+        // Reset progress
+        setTimeout(() => {
+          setState(prev => ({ ...prev, progress: 0 }));
+        }, 500);
+      } else if (message.type === 'error') {
+        throw new Error(message.data.error || 'Processing failed');
+      }
+    });
+
+    ws.onError(() => {
+      // FIXED N5: Don't throw on WebSocket error - allow resume
+      setState(prev => ({
+        ...prev,
+        isProcessing: false,
+        error: 'Connection lost. You can resume processing.',
+        canResume: true,
+      }));
+    });
+  }, [loadSong]);
+
   const processSong = useCallback(async (file: File) => {
     // FIXED H8: Prevent concurrent uploads causing memory leaks
     if (state.isProcessing) {
@@ -98,61 +160,8 @@ export const useStemProcessor = () => {
       const ws = new WebSocketService(client_id);
       wsRef.current = ws;
 
-      // Handle progress updates
-      ws.onMessage((message) => {
-        if (message.type === 'progress') {
-          setState(prev => ({
-            ...prev,
-            progress: message.data.progress,
-          }));
-        } else if (message.type === 'complete') {
-          // Processing complete, load stems
-          const stemPaths = message.data.stems;
-
-          // FIXED N3: Track URLs for cleanup
-          const stemUrls = Object.values(stemPaths) as string[];
-          stemUrlsRef.current = stemUrls;
-
-          const song = {
-            id: client_id,
-            title: file.name.replace(/\.[^/.]+$/, ''),
-            artist: 'Unknown Artist',
-            stems: {
-              drums: stemPaths.drums,
-              bass: stemPaths.bass,
-              other: stemPaths.other,
-              vocals: stemPaths.vocals,
-            },
-          };
-
-          setState({ isProcessing: false, progress: 100, error: null, canResume: false });
-          loadSong(song);
-
-          // FIXED N5: Clear processing session on success
-          clearProcessingSession();
-
-          // Cleanup WebSocket
-          ws.disconnect();
-          wsRef.current = null;
-
-          // Reset progress
-          setTimeout(() => {
-            setState(prev => ({ ...prev, progress: 0 }));
-          }, 500);
-        } else if (message.type === 'error') {
-          throw new Error(message.data.error || 'Processing failed');
-        }
-      });
-
-      ws.onError(() => {
-        // FIXED N5: Don't throw on WebSocket error - allow resume
-        setState(prev => ({
-          ...prev,
-          isProcessing: false,
-          error: 'Connection lost. You can resume processing.',
-          canResume: true,
-        }));
-      });
+      // FIXED H2: Use shared handler instead of duplicating logic
+      setupWebSocketHandlers(ws, client_id, file.name);
 
       ws.connect();
 
@@ -200,59 +209,8 @@ export const useStemProcessor = () => {
       // FIXED C6: Store for cancellation
       clientIdRef.current = session.clientId;
 
-      // Handle progress updates (same as processSong)
-      ws.onMessage((message) => {
-        if (message.type === 'progress') {
-          setState(prev => ({
-            ...prev,
-            progress: message.data.progress,
-          }));
-        } else if (message.type === 'complete') {
-          const stemPaths = message.data.stems;
-          const stemUrls = Object.values(stemPaths) as string[];
-          stemUrlsRef.current = stemUrls;
-
-          const song = {
-            id: session.clientId,
-            title: currentFileRef.current || 'Resumed Song',
-            artist: 'Unknown Artist',
-            stems: {
-              drums: stemPaths.drums,
-              bass: stemPaths.bass,
-              other: stemPaths.other,
-              vocals: stemPaths.vocals,
-            },
-          };
-
-          setState({ isProcessing: false, progress: 100, error: null, canResume: false });
-          loadSong(song);
-          clearProcessingSession();
-
-          ws.disconnect();
-          wsRef.current = null;
-
-          setTimeout(() => {
-            setState(prev => ({ ...prev, progress: 0 }));
-          }, 500);
-        } else if (message.type === 'error') {
-          setState({
-            isProcessing: false,
-            progress: 0,
-            error: message.data.error || 'Processing failed',
-            canResume: false,
-          });
-          clearProcessingSession();
-        }
-      });
-
-      ws.onError(() => {
-        setState(prev => ({
-          ...prev,
-          isProcessing: false,
-          error: 'Failed to reconnect',
-          canResume: true,
-        }));
-      });
+      // FIXED H2: Use shared handler instead of duplicating logic
+      setupWebSocketHandlers(ws, session.clientId, currentFileRef.current || 'Resumed Song');
 
       ws.connect();
     } catch (error) {
