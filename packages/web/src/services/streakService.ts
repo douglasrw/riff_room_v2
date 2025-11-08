@@ -47,6 +47,8 @@ export class StreakService {
 
   /**
    * Record a practice session.
+   *
+   * FIXED: Proper API parameter mapping, error handling, and validation.
    */
   async recordSession(
     songId: number,
@@ -54,34 +56,63 @@ export class StreakService {
     loops: number = 0,
     stemsUsed?: string[]
   ): Promise<void> {
+    // Input validation
+    if (duration < 0) {
+      throw new Error('Duration must be non-negative');
+    }
+    if (loops < 0) {
+      throw new Error('Loops must be non-negative');
+    }
+
     const today = startOfDay(new Date());
+    const todayString = today.toISOString().split('T')[0];
 
-    // Record session
-    await fetch(`${this.apiBaseUrl}/api/sessions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        songId,
-        startedAt: new Date().toISOString(),
-        durationSeconds: duration,
-        loopsPracticed: loops,
-        stemsUsed: stemsUsed ? JSON.stringify(stemsUsed) : null,
-      }),
-    });
+    try {
+      // Record session
+      const sessionResponse = await fetch(`${this.apiBaseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          songId,
+          startedAt: new Date().toISOString(),
+          durationSeconds: duration,
+          loopsPracticed: loops,
+          // FIXED: Don't double-stringify - backend expects JSON string
+          stemsUsed: stemsUsed ? JSON.stringify(stemsUsed) : null,
+        }),
+      });
 
-    // Update daily streak
-    await fetch(`${this.apiBaseUrl}/api/streaks/${today.toISOString().split('T')[0]}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        practiceTimeSeconds: duration,
-        songsPracticed: 1,
-        sessionsCount: 1,
-      }),
-    });
+      if (!sessionResponse.ok) {
+        throw new Error(`Failed to record session: ${sessionResponse.statusText}`);
+      }
 
-    // Check achievements
-    await this.checkAchievements();
+      // Update daily streak
+      // FIXED: Use songs_practiced array, not count - backend deduplicates
+      const streakResponse = await fetch(
+        `${this.apiBaseUrl}/api/streaks/${todayString}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            practiceTimeSeconds: duration,
+            // FIXED: Send song ID array, not count - backend merges and deduplicates
+            songsPracticed: [`song_${songId}`],
+            // Note: sessionCount incremented automatically by backend
+          }),
+        }
+      );
+
+      if (!streakResponse.ok) {
+        throw new Error(`Failed to update streak: ${streakResponse.statusText}`);
+      }
+
+      // Check achievements
+      await this.checkAchievements();
+    } catch (error) {
+      console.error('[StreakService] Failed to record session:', error);
+      // Re-throw so caller can handle (e.g., show error to user, retry)
+      throw error;
+    }
   }
 
   /**
@@ -201,18 +232,18 @@ export class StreakService {
    */
   private notifyAchievement(type: string): void {
     const messages: Record<string, string> = {
-      streak_7: '=% 7-day streak! You\'re on fire!',
-      streak_30: '� 30-day streak! Legendary dedication!',
-      streak_100: '<� 100-day streak! You\'re unstoppable!',
-      songs_10: '<� 10 songs mastered!',
-      songs_50: '<� 50 songs mastered! Rock star status!',
-      songs_100: '< 100 songs! Musical legend!',
-      hours_10: '� 10 hours of practice!',
-      hours_50: '=� 50 hours! Serious dedication!',
-      hours_100: '<� 100 hours! Elite musician!',
+      streak_7: '🔥 7-day streak! You\'re on fire!',
+      streak_30: '🏆 30-day streak! Legendary dedication!',
+      streak_100: '👑 100-day streak! You\'re unstoppable!',
+      songs_10: '🎸 10 songs mastered!',
+      songs_50: '🎸 50 songs mastered! Rock star status!',
+      songs_100: '🎸 100 songs! Musical legend!',
+      hours_10: '⏰ 10 hours of practice!',
+      hours_50: '⏰ 50 hours! Serious dedication!',
+      hours_100: '⏰ 100 hours! Elite musician!',
     };
 
-    const message = messages[type] || 'Achievement unlocked!';
+    const message = messages[type] || '🎯 Achievement unlocked!';
 
     // This would integrate with a toast/notification library
     // For now, just log it

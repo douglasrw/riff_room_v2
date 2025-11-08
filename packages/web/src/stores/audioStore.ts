@@ -88,13 +88,17 @@ export const useAudioStore = create<AudioStore>((set, get) => {
 
     // Actions
     loadSong: async (song: Song) => {
-      set({ currentSong: song, isLoadingStems: true });
+      // FIXED C5: Don't set currentSong until stems actually load
+      // Prevents state inconsistency where UI shows new song but engine has old/no audio
+      set({ isLoadingStems: true });
       try {
-        // FIXED: Pass songId to enable caching
+        // Pass songId to enable caching
         await audioEngine.loadStems(song.stems, song.id);
-        set({ isLoadingStems: false });
+        // Only set currentSong after successful load
+        set({ currentSong: song, isLoadingStems: false });
       } catch (error) {
-        set({ isLoadingStems: false });
+        // On error, clear currentSong to prevent playing wrong audio
+        set({ currentSong: null, isLoadingStems: false });
         throw error;
       }
     },

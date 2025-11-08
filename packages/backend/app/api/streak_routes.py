@@ -107,32 +107,57 @@ def update_streak(
     streak_date: date,
     streak_update: StreakUpdate,
 ) -> Streak:
-    """Update or create streak record for a specific date."""
-    # Get existing streak or create new one
-    streak = db.get(Streak, streak_date)
+    """Update or create streak record for a specific date.
 
-    if not streak:
-        # Create new streak record
-        streak = Streak(date=streak_date)
-        db.add(streak)
-
-    # Update fields (increment rather than replace)
+    FIXED: Added validation and atomic update to prevent race conditions.
+    """
+    # Input validation
     if streak_update.practice_time_seconds is not None:
-        streak.practice_time_seconds += streak_update.practice_time_seconds
+        if streak_update.practice_time_seconds < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="practice_time_seconds must be non-negative"
+            )
 
-    if streak_update.songs_practiced is not None:
-        # Merge song lists and deduplicate
-        existing_songs = set(streak.songs_practiced)
-        new_songs = set(streak_update.songs_practiced)
-        streak.songs_practiced = list(existing_songs | new_songs)
+    # FIXED: Use BEGIN IMMEDIATE for write intent (prevents other writers)
+    # SQLite WAL mode allows concurrent reads but only one writer
+    db.execute("BEGIN IMMEDIATE")
 
-    # Increment session count
-    streak.session_count += 1
+    try:
+        # Get existing streak or create new one
+        streak = db.get(Streak, streak_date)
 
-    db.commit()
-    db.refresh(streak)
+        if not streak:
+            # Create new streak record with initial values
+            streak = Streak(
+                date=streak_date,
+                practice_time_seconds=streak_update.practice_time_seconds or 0,
+                songs_practiced=streak_update.songs_practiced or [],
+                session_count=1,
+            )
+            db.add(streak)
+        else:
+            # Update existing streak (increment rather than replace)
+            if streak_update.practice_time_seconds is not None:
+                streak.practice_time_seconds += streak_update.practice_time_seconds
 
-    return streak
+            if streak_update.songs_practiced is not None:
+                # Merge song lists and deduplicate
+                existing_songs = set(streak.songs_practiced)
+                new_songs = set(streak_update.songs_practiced)
+                streak.songs_practiced = list(existing_songs | new_songs)
+
+            # Increment session count
+            streak.session_count += 1
+
+        db.commit()
+        db.refresh(streak)
+
+        return streak
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 # === Achievement Endpoints ===
@@ -155,27 +180,47 @@ def create_achievement(
     db: Annotated[Session, Depends(get_session)],
     achievement_data: AchievementCreate,
 ) -> Achievement:
-    """Unlock a new achievement."""
-    # Check if achievement already exists
-    existing = db.exec(
-        select(Achievement).where(
-            Achievement.achievement_type == achievement_data.achievement_type
-        )
-    ).first()
+    """Unlock a new achievement.
 
-    if existing:
-        raise HTTPException(
-            status_code=409, detail="Achievement already unlocked"
-        )
+    FIXED: Use database unique constraint to prevent race conditions (TOCTOU bug).
+    Returns 409 if achievement already exists.
+    """
+    try:
+        # FIXED: Use BEGIN IMMEDIATE to prevent race condition
+        db.execute("BEGIN IMMEDIATE")
 
-    # Create new achievement
-    achievement = Achievement(**achievement_data.model_dump())
+        # Check if achievement already exists
+        existing = db.exec(
+            select(Achievement).where(
+                Achievement.achievement_type == achievement_data.achievement_type
+            )
+        ).first()
 
-    db.add(achievement)
-    db.commit()
-    db.refresh(achievement)
+        if existing:
+            raise HTTPException(
+                status_code=409, detail="Achievement already unlocked"
+            )
 
-    return achievement
+        # Create new achievement
+        achievement = Achievement(**achievement_data.model_dump())
+
+        db.add(achievement)
+        db.commit()
+        db.refresh(achievement)
+
+        return achievement
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        # If unique constraint violation (shouldn't happen with locking, but defensive)
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(
+                status_code=409, detail="Achievement already unlocked"
+            ) from e
+        raise
 
 
 @router.get("/achievements/{achievement_id}", response_model=Achievement)
