@@ -143,7 +143,8 @@ def test_cache_stats(cache_manager, temp_cache_dir, tmp_path):
     # Add some entries
     stems_dir = tmp_path / "stems"
     stems_dir.mkdir()
-    (stems_dir / "test.wav").write_bytes(b"x" * 1000)  # 1KB file
+    # Create 2MB file to ensure total_size_mb > 0
+    (stems_dir / "test.wav").write_bytes(b"x" * (2 * 1024 * 1024))
 
     cache_manager.set("test", stems_dir)
 
@@ -151,8 +152,8 @@ def test_cache_stats(cache_manager, temp_cache_dir, tmp_path):
     stats = cache_manager.get_stats()
 
     assert stats["entry_count"] == 1
-    assert stats["total_size_bytes"] == 1000
-    assert stats["total_size_mb"] > 0
+    assert stats["total_size_bytes"] == 2 * 1024 * 1024
+    assert stats["total_size_mb"] >= 2.0
 
 
 def test_get_cache_manager_singleton():

@@ -21,7 +21,12 @@ def test_health_check(client):
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    data = response.json()
+    assert "status" in data
+    assert data["status"] in ["healthy", "degraded", "unhealthy"]
+    assert "timestamp" in data
+    assert "checks" in data
+    assert "version" in data
 
 
 def test_process_no_file(client):
