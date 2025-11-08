@@ -74,7 +74,10 @@ class DemucsProcessor:
         # Generate cache key from file hash
         file_hash = await self._get_file_hash(audio_path)
         cache_path = self.cache_dir / file_hash
-        cache_path.mkdir(parents=True, exist_ok=True)
+
+        # FIXED C3: Don't create cache dir until after successful separation
+        # If we create it now and separation is cancelled, next attempt will fail
+        # (cache check passes but stems don't exist)
 
         # Check if stems already cached
         if await self._check_cache(cache_path):
@@ -108,13 +111,17 @@ class DemucsProcessor:
             if cancellation_event and cancellation_event.is_set():
                 raise CancellationError("Processing cancelled before separation")
 
+            # LIMITATION (C2): PyTorch model.forward() is blocking and cannot be interrupted
+            # This operation takes 20-30s and we cannot cancel during execution
+            # We check immediately before and after, but must wait for completion
+            # Future improvement: chunked processing or timeout-based kill
             stems = await loop.run_in_executor(
                 None,
                 self._run_separation,
                 audio_path,
             )
 
-            # Check cancellation after separation
+            # Check cancellation after separation completes
             if cancellation_event and cancellation_event.is_set():
                 # Clean up tensors before raising
                 for tensor in stems.values():
@@ -169,6 +176,10 @@ class DemucsProcessor:
             stems: Dictionary of stem tensors
             cache_path: Directory to save stems
         """
+        # FIXED C3: Create cache dir only when we're ready to write
+        # This prevents partial cache corruption if cancelled before this point
+        cache_path.mkdir(parents=True, exist_ok=True)
+
         loop = asyncio.get_event_loop()
 
         for stem_name, tensor in stems.items():
