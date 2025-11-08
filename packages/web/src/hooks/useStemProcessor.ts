@@ -1,11 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAudioStore } from '../stores/audioStore';
+import { WebSocketService } from '../services/websocket';
 
 interface StemProcessingState {
   isProcessing: boolean;
   progress: number;
   error: string | null;
 }
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8007';
 
 export const useStemProcessor = () => {
   const [state, setState] = useState<StemProcessingState>({
@@ -15,50 +18,97 @@ export const useStemProcessor = () => {
   });
 
   const loadSong = useAudioStore((s) => s.loadSong);
+  const wsRef = useRef<WebSocketService | null>(null);
+  const stemUrlsRef = useRef<string[]>([]);
+
+  // FIXED N1: Cleanup object URLs and WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      // Revoke all created object URLs to prevent memory leak
+      stemUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      stemUrlsRef.current = [];
+
+      // Disconnect WebSocket
+      if (wsRef.current) {
+        wsRef.current.disconnect();
+        wsRef.current = null;
+      }
+    };
+  }, []);
 
   const processSong = useCallback(async (file: File) => {
     setState({ isProcessing: true, progress: 0, error: null });
 
     try {
-      // TODO: Send to backend for processing when backend is ready
-      // For now, simulate processing and use mock data
+      // FIXED N1: Actually call backend API instead of using mock data
+      const formData = new FormData();
+      formData.append('file', file);
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setState(prev => ({
-          ...prev,
-          progress: Math.min(prev.progress + 10, 90),
-        }));
-      }, 300);
+      // Upload file to backend
+      const response = await fetch(`${API_URL}/api/process`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new Error(error.detail || 'Upload failed');
+      }
 
-      clearInterval(progressInterval);
+      const { client_id } = await response.json();
 
-      // Create mock song with stems
-      // In production, these URLs would come from the backend
-      const mockSong = {
-        id: `song-${Date.now()}`,
-        title: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
-        artist: 'Unknown Artist',
-        stems: {
-          drums: URL.createObjectURL(file), // Using original file as placeholder
-          bass: URL.createObjectURL(file),
-          other: URL.createObjectURL(file),
-          vocals: URL.createObjectURL(file),
-        },
-      };
+      // Connect to WebSocket for progress updates
+      const ws = new WebSocketService(client_id, API_URL.replace('http', 'ws'));
+      wsRef.current = ws;
 
-      setState({ isProcessing: false, progress: 100, error: null });
+      // Handle progress updates
+      ws.onMessage((message) => {
+        if (message.type === 'progress') {
+          setState(prev => ({
+            ...prev,
+            progress: message.data.progress,
+          }));
+        } else if (message.type === 'complete') {
+          // Processing complete, load stems
+          const stemPaths = message.data.stems;
 
-      // Load the song into the audio engine
-      await loadSong(mockSong);
+          // FIXED N3: Track URLs for cleanup
+          const stemUrls = Object.values(stemPaths) as string[];
+          stemUrlsRef.current = stemUrls;
 
-      // Reset progress after a brief delay
-      setTimeout(() => {
-        setState(prev => ({ ...prev, progress: 0 }));
-      }, 500);
+          const song = {
+            id: client_id,
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            artist: 'Unknown Artist',
+            stems: {
+              drums: stemPaths.drums,
+              bass: stemPaths.bass,
+              other: stemPaths.other,
+              vocals: stemPaths.vocals,
+            },
+          };
+
+          setState({ isProcessing: false, progress: 100, error: null });
+          loadSong(song);
+
+          // Cleanup WebSocket
+          ws.disconnect();
+          wsRef.current = null;
+
+          // Reset progress
+          setTimeout(() => {
+            setState(prev => ({ ...prev, progress: 0 }));
+          }, 500);
+        } else if (message.type === 'error') {
+          throw new Error(message.data.error || 'Processing failed');
+        }
+      });
+
+      ws.onError(() => {
+        throw new Error('WebSocket connection failed');
+      });
+
+      ws.connect();
 
     } catch (error) {
       console.error('Stem processing error:', error);
@@ -67,6 +117,12 @@ export const useStemProcessor = () => {
         progress: 0,
         error: error instanceof Error ? error.message : 'Failed to process song',
       });
+
+      // Cleanup on error
+      if (wsRef.current) {
+        wsRef.current.disconnect();
+        wsRef.current = null;
+      }
     }
   }, [loadSong]);
 

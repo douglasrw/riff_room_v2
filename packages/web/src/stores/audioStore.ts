@@ -87,7 +87,8 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     // Actions
     loadSong: async (song: Song) => {
       set({ currentSong: song });
-      await audioEngine.loadStems(song.stems);
+      // FIXED: Pass songId to enable caching
+      await audioEngine.loadStems(song.stems, song.id);
     },
 
     togglePlay: async () => {

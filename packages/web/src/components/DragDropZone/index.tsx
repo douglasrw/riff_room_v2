@@ -1,14 +1,27 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload } from 'lucide-react';
 import { useStemProcessor } from '../../hooks/useStemProcessor';
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (matches backend limit)
+
 export const DragDropZone = () => {
-  const { processSong, isProcessing, progress } = useStemProcessor();
+  // FIXED N4: Get error state to display to user
+  const { processSong, isProcessing, progress, error: processingError } = useStemProcessor();
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const onDrop = useCallback(async (files: File[]) => {
     const audioFile = files[0];
     if (!audioFile) return;
+
+    // Clear previous validation errors
+    setValidationError(null);
+
+    // FIXED N2: Validate file size (prevents wasting network bandwidth)
+    if (audioFile.size > MAX_FILE_SIZE) {
+      setValidationError(`File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+      return;
+    }
 
     // Validate file type
     const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/m4a', 'audio/x-m4a'];
@@ -16,13 +29,16 @@ export const DragDropZone = () => {
                    /\.(mp3|wav|m4a)$/i.test(audioFile.name);
 
     if (!isValid) {
-      console.error('Unsupported file type:', audioFile.type);
+      setValidationError('Unsupported file type. Please use MP3, WAV, or M4A');
       return;
     }
 
     // Start processing
     await processSong(audioFile);
   }, [processSong]);
+
+  // Use validation error if present, otherwise processing error
+  const error = validationError || processingError;
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -50,7 +66,34 @@ export const DragDropZone = () => {
     >
       <input {...getInputProps()} />
 
-      {isProcessing ? (
+      {/* FIXED N4: Display error message to user */}
+      {error ? (
+        <div className="space-y-4">
+          <div className="flex justify-center">
+            <div className="p-4 bg-red-500/20 rounded-full">
+              <span className="text-4xl">⚠️</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-red-400">
+              {validationError ? 'Invalid File' : 'Processing Failed'}
+            </p>
+            <p className="text-sm text-gray-400">{error}</p>
+            <button
+              onClick={() => {
+                setValidationError(null);
+                // For processing errors, reload is safer
+                if (processingError) {
+                  window.location.reload();
+                }
+              }}
+              className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-medium transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      ) : isProcessing ? (
         <div className="space-y-4">
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />

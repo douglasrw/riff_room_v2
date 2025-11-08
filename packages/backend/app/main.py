@@ -19,6 +19,11 @@ decouple_config = DecoupleConfig(RepositoryEnv(".env"))
 API_BASE_URL = decouple_config("API_BASE_URL", default="http://localhost:8007")
 CACHE_DIR = Path(decouple_config("CACHE_DIR", default="~/.riffroom/stems")).expanduser()
 DEBUG = decouple_config("DEBUG", default=False, cast=bool)
+# FIXED M6: Make CORS origins configurable via environment variable
+CORS_ORIGINS = decouple_config(
+    "CORS_ORIGINS",
+    default="http://localhost:5173,http://localhost:3000"
+).split(",")
 
 
 @asynccontextmanager
@@ -44,9 +49,10 @@ app = FastAPI(
 )
 
 # CORS middleware
+# FIXED M6: Use configurable origins instead of hardcoded values
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

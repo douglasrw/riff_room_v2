@@ -38,7 +38,8 @@ export class WebSocketService {
    * Connect to WebSocket server
    */
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    // FIXED: Guard against multiple concurrent connect calls
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
@@ -85,6 +86,10 @@ export class WebSocketService {
       this.ws.close();
       this.ws = null;
     }
+    // FIXED: Clear handlers to prevent memory leaks across reconnects
+    this.messageHandlers.clear();
+    this.errorHandlers.clear();
+    this.closeHandlers.clear();
   }
 
   /**
@@ -153,9 +158,11 @@ export class WebSocketService {
    */
   private startPingInterval(): void {
     this.stopPingInterval();
+    // FIXED M3: Reduced from 30s to 15s to prevent proxy timeouts
+    // Many proxies/load balancers timeout idle connections at 60s
     this.pingInterval = window.setInterval(() => {
       this.send({ type: 'ping' });
-    }, 30000); // Ping every 30 seconds
+    }, 15000); // Ping every 15 seconds
   }
 
   /**

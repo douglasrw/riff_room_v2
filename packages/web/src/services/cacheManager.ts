@@ -40,10 +40,12 @@ export class CacheManager<T = any> {
   private options: Required<CacheOptions>;
   private dbName: string = 'riffroom-cache';
   private db: IDBDatabase | null = null;
+  // FIXED: Track initialization promise to prevent race conditions
+  private _initPromise: Promise<void> | null = null;
 
   constructor(options: CacheOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
-    this.initIndexedDB();
+    this._initPromise = this.initIndexedDB();
   }
 
   private async initIndexedDB(): Promise<void> {
@@ -74,6 +76,14 @@ export class CacheManager<T = any> {
    * Get value from cache (checks all layers)
    */
   async get(key: string): Promise<T | null> {
+    // FIXED: Wait for initialization to complete
+    if (this._initPromise) {
+      await this._initPromise.catch(() => {
+        // If IndexedDB fails (e.g., private browsing), continue with memory-only cache
+        this.db = null;
+      });
+    }
+
     // L1: Check memory cache
     const memoryEntry = this.memoryCache.get(key);
     if (memoryEntry && !this.isExpired(memoryEntry)) {
@@ -81,12 +91,14 @@ export class CacheManager<T = any> {
       return memoryEntry.value;
     }
 
-    // L2: Check IndexedDB
-    const dbEntry = await this.getFromIndexedDB(key);
-    if (dbEntry && !this.isExpired(dbEntry)) {
-      // Promote to memory cache
-      this.setInMemory(key, dbEntry.value, dbEntry.size);
-      return dbEntry.value;
+    // L2: Check IndexedDB (if available)
+    if (this.db) {
+      const dbEntry = await this.getFromIndexedDB(key);
+      if (dbEntry && !this.isExpired(dbEntry)) {
+        // Promote to memory cache
+        this.setInMemory(key, dbEntry.value, dbEntry.size);
+        return dbEntry.value;
+      }
     }
 
     return null;
@@ -96,13 +108,23 @@ export class CacheManager<T = any> {
    * Set value in all cache layers
    */
   async set(key: string, value: T, sizeBytes?: number): Promise<void> {
+    // FIXED: Wait for initialization to complete
+    if (this._initPromise) {
+      await this._initPromise.catch(() => {
+        // If IndexedDB fails, continue with memory-only cache
+        this.db = null;
+      });
+    }
+
     const size = sizeBytes ?? this.estimateSize(value);
 
     // L1: Memory cache
     this.setInMemory(key, value, size);
 
-    // L2: IndexedDB
-    await this.setInIndexedDB(key, value, size);
+    // L2: IndexedDB (if available)
+    if (this.db) {
+      await this.setInIndexedDB(key, value, size);
+    }
   }
 
   private setInMemory(key: string, value: T, size: number): void {

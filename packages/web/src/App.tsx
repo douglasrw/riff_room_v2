@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { DragDropZone } from './components/DragDropZone';
 import { WaveformDisplay } from './components/WaveformDisplay';
 import { PlaybackControls } from './components/PlaybackControls';
@@ -7,7 +8,7 @@ import { KeyboardOverlay } from './components/KeyboardOverlay';
 import { useAudioStore } from './stores/audioStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
-export default function App() {
+function AppContent() {
   const { currentSong, setShowShortcuts } = useAudioStore();
 
   // Initialize keyboard shortcuts
@@ -101,5 +102,14 @@ export default function App() {
       {/* Keyboard Overlay */}
       <KeyboardOverlay />
     </div>
+  );
+}
+
+// FIXED M1: Wrap app with ErrorBoundary to prevent full crashes
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }

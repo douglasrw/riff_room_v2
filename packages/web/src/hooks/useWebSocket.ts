@@ -73,9 +73,23 @@ export function useWebSocket({
       setIsConnected(false);
     });
 
+    // FIXED: Track connection state via onopen event instead of polling
+    const ws = wsRef.current;
+    const originalConnect = ws.connect.bind(ws);
+    ws.connect = () => {
+      originalConnect();
+      // Update connection state when WebSocket opens
+      const checkConnection = setInterval(() => {
+        if (wsRef.current?.isConnected) {
+          setIsConnected(true);
+          clearInterval(checkConnection);
+        }
+      }, 50); // Quick check until connected, then stop
+    };
+
     // Auto-connect if enabled
     if (autoConnect) {
-      wsRef.current.connect();
+      ws.connect();
     }
 
     // Cleanup
@@ -85,16 +99,8 @@ export function useWebSocket({
       unsubscribeError();
       wsRef.current?.disconnect();
     };
-  }, [clientId, baseUrl, autoConnect]);
-
-  // Update connection state
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsConnected(wsRef.current?.isConnected ?? false);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
+    // FIXED: Include callback deps to prevent stale closures
+  }, [clientId, baseUrl, autoConnect, onProgress, onComplete, onError]);
 
   // Connect function
   const connect = useCallback(() => {

@@ -67,10 +67,10 @@ export const useKeyboardShortcuts = () => {
 export const KEYBOARD_SHORTCUTS = {
   playback: [
     { keys: ['Space'], description: 'Play/Pause' },
-    { keys: [''], description: 'Skip back 5s' },
-    { keys: ['’'], description: 'Skip forward 5s' },
-    { keys: ['Shift', ''], description: 'Skip back 10s' },
-    { keys: ['Shift', '’'], description: 'Skip forward 10s' },
+    { keys: ['Left'], description: 'Skip back 5s' },
+    { keys: ['Right'], description: 'Skip forward 5s' },
+    { keys: ['Shift', 'Left'], description: 'Skip back 10s' },
+    { keys: ['Shift', 'Right'], description: 'Skip forward 10s' },
   ],
   stems: [
     { keys: ['1'], description: 'Solo drums' },
@@ -81,7 +81,7 @@ export const KEYBOARD_SHORTCUTS = {
     { keys: ['Shift', '1-4'], description: 'Mute/unmute stem' },
   ],
   speed: [
-    { keys: ['S'], description: 'Cycle speed (70% ’ 85% ’ 100%)' },
+    { keys: ['S'], description: 'Cycle speed (70% > 85% > 100%)' },
   ],
   loop: [
     { keys: ['['], description: 'Set loop start' },

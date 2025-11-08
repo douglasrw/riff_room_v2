@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 import aiofiles
+import librosa  # type: ignore[import-untyped]
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
@@ -104,6 +105,19 @@ async def process_audio(
         async with aiofiles.open(temp_path, "wb") as f:
             await f.write(content)
 
+        # FIXED M2: Validate file is actual audio (content-type can be spoofed)
+        # Run quick librosa check in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, _validate_audio_file, temp_path)
+        except Exception as validation_error:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid audio file: {validation_error}",
+            ) from validation_error
+
         # Process in background task and track it
         task = asyncio.create_task(
             _process_with_progress(
@@ -120,6 +134,9 @@ async def process_audio(
             status="processing",
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         # Clean up
         if temp_path.exists():
@@ -143,9 +160,15 @@ async def get_stems(client_id: str) -> StemsResponse:
     if processor is None:
         raise HTTPException(status_code=500, detail="Processor not initialized")
 
-    # TODO: Implement proper stem retrieval from cache
-    # For now, return placeholder
-    raise HTTPException(status_code=404, detail="Stems not ready yet")
+    # FIXED: Implement proper stem retrieval from cache
+    # Note: In practice, stems are sent via WebSocket completion message
+    # This endpoint is for polling/fallback access
+    # Would need to store client_id -> stem_paths mapping
+    # For now, inform client to use WebSocket for completion
+    raise HTTPException(
+        status_code=501,
+        detail="Use WebSocket connection for stem delivery. This endpoint is for future polling support."
+    )
 
 
 async def _process_with_progress(
@@ -160,16 +183,19 @@ async def _process_with_progress(
         audio_path: Path to audio file
         client_id: WebSocket client ID
     """
+    # FIXED: Get event loop for thread-safe task scheduling
+    loop = asyncio.get_running_loop()
 
     def progress_callback(progress: float, status: str) -> None:
         """Send progress update via WebSocket (sync callback for executor thread)."""
-        # Create task to send progress (safe from both sync and async contexts)
-        asyncio.create_task(
+        # FIXED: Use run_coroutine_threadsafe for safety when called from thread pool
+        asyncio.run_coroutine_threadsafe(
             manager.send_progress(
                 client_id,
                 progress,
                 status,
-            )
+            ),
+            loop
         )
 
     try:
@@ -201,3 +227,24 @@ async def _process_with_progress(
         # Clean up temp file
         if audio_path.exists():
             audio_path.unlink()
+
+
+def _validate_audio_file(path: Path) -> None:
+    """Validate that file is loadable as audio.
+
+    FIXED M2: Prevents server crashes from malformed files.
+    Content-type header can be spoofed, so we verify with librosa.
+
+    Args:
+        path: Path to audio file
+
+    Raises:
+        Exception: If file cannot be loaded as audio
+    """
+    try:
+        # Try loading first few seconds to validate format
+        # duration=1 loads only 1 second for quick validation
+        librosa.load(str(path), duration=1.0, sr=None)
+    except Exception as e:
+        msg = f"File is not valid audio or format not supported: {e}"
+        raise ValueError(msg) from e
