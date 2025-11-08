@@ -7,24 +7,34 @@ export const StreakIndicator = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // FIXED: Fetch from backend streak service
+    // FIXED: Fetch from backend streak service with cleanup to prevent race conditions
+    let isMounted = true;
+
     const fetchStreak = async () => {
       try {
         const currentStreak = await streakService.getCurrentStreak();
-        setStreak(currentStreak);
+        if (isMounted) {
+          setStreak(currentStreak);
+        }
       } catch (error) {
         console.error('Failed to fetch streak:', error);
         // Fallback to localStorage for offline support
         const savedStreak = localStorage.getItem('practice-streak');
-        if (savedStreak) {
+        if (isMounted && savedStreak) {
           setStreak(parseInt(savedStreak, 10));
         }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchStreak();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (isLoading) return null;

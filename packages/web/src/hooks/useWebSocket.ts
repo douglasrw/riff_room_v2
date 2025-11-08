@@ -74,15 +74,19 @@ export function useWebSocket({
     });
 
     // FIXED: Track connection state via onopen event instead of polling
+    let checkConnectionInterval: number | undefined;
     const ws = wsRef.current;
     const originalConnect = ws.connect.bind(ws);
     ws.connect = () => {
       originalConnect();
       // Update connection state when WebSocket opens
-      const checkConnection = setInterval(() => {
+      checkConnectionInterval = window.setInterval(() => {
         if (wsRef.current?.isConnected) {
           setIsConnected(true);
-          clearInterval(checkConnection);
+          if (checkConnectionInterval) {
+            clearInterval(checkConnectionInterval);
+            checkConnectionInterval = undefined;
+          }
         }
       }, 50); // Quick check until connected, then stop
     };
@@ -94,6 +98,10 @@ export function useWebSocket({
 
     // Cleanup
     return () => {
+      // FIXED: Clear connection check interval to prevent memory leak
+      if (checkConnectionInterval) {
+        clearInterval(checkConnectionInterval);
+      }
       unsubscribeMessage();
       unsubscribeClose();
       unsubscribeError();
