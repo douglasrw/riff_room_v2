@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
 from app.api import streak_routes
 from app.api.websocket import websocket_endpoint
+from app.core.logging_config import get_logger, setup_logging
 from app.database import create_db_and_tables
 
 # Initialize decouple config
@@ -21,29 +22,53 @@ decouple_config = DecoupleConfig(RepositoryEnv(".env"))
 API_BASE_URL = decouple_config("API_BASE_URL", default="http://localhost:8007")
 CACHE_DIR = Path(decouple_config("CACHE_DIR", default="~/.riffroom/stems")).expanduser()
 DEBUG = decouple_config("DEBUG", default=False, cast=bool)
+LOG_LEVEL = decouple_config("LOG_LEVEL", default="DEBUG" if DEBUG else "INFO")
+LOG_FILE = decouple_config("LOG_FILE", default=None)
 # FIXED M6: Make CORS origins configurable via environment variable
 CORS_ORIGINS = decouple_config(
     "CORS_ORIGINS",
     default="http://localhost:5173,http://localhost:3000"
 ).split(",")
 
+# FIXED L3: Initialize logging infrastructure
+if LOG_FILE:
+    log_file_path = Path(LOG_FILE).expanduser()
+else:
+    log_file_path = None
+
+setup_logging(
+    level=LOG_LEVEL,
+    log_file=log_file_path,
+    rich_tracebacks=True,
+)
+
+logger = get_logger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan - setup and teardown."""
     # Startup
+    logger.info("🎸 Starting RiffRoom Backend")
+    logger.info(f"Cache directory: {CACHE_DIR}")
+    logger.info(f"CORS origins: {', '.join(CORS_ORIGINS)}")
+    logger.info(f"Debug mode: {DEBUG}")
+
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     # Initialize database tables
+    logger.info("Initializing database...")
     create_db_and_tables()
 
     # Initialize Demucs processor
+    logger.info("Loading Demucs ML model...")
     routes.initialize_processor(CACHE_DIR)
+    logger.info("✓ RiffRoom Backend ready")
 
     yield
 
     # Shutdown
-    pass
+    logger.info("Shutting down RiffRoom Backend")
 
 
 app = FastAPI(

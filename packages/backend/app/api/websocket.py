@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-logger = logging.getLogger(__name__)
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ConnectionManager:
@@ -37,6 +38,7 @@ class ConnectionManager:
             await websocket.accept()
             self.active_connections[client_id] = websocket
             self.connection_timestamps[client_id] = time.time()
+            logger.info(f"WebSocket connected: {client_id} (total: {len(self.active_connections)})")
 
             # Start cleanup task if not running
             if self._cleanup_task is None or self._cleanup_task.done():
@@ -54,6 +56,7 @@ class ConnectionManager:
         """
         if client_id in self.active_connections:
             del self.active_connections[client_id]
+            logger.info(f"WebSocket disconnected: {client_id} (remaining: {len(self.active_connections)})")
         if client_id in self.connection_timestamps:
             del self.connection_timestamps[client_id]
 

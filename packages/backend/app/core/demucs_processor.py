@@ -10,8 +10,12 @@ from typing import TYPE_CHECKING
 import torch
 from demucs.api import Separator
 
+from app.core.logging_config import get_logger
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = get_logger(__name__)
 
 
 class ProcessingError(Exception):
@@ -37,12 +41,14 @@ class DemucsProcessor:
 
         # Initialize Demucs separator
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Initializing Demucs model '{model_name}' on {device}")
         self.separator = Separator(
             model=model_name,
             device=device,
             shifts=1,  # Balance quality vs speed
             overlap=0.25,
         )
+        logger.info(f"Demucs ready (cache: {cache_dir})")
 
     async def process_song(
         self,
@@ -71,9 +77,12 @@ class DemucsProcessor:
 
         # Check if stems already cached
         if await self._check_cache(cache_path):
+            logger.info(f"Cache hit for {audio_path.name} ({file_hash})")
             if progress_callback:
                 progress_callback(100.0, "Loaded from cache")
             return self._get_stem_paths(cache_path)
+
+        logger.info(f"Processing {audio_path.name} ({file_hash})")
 
         # Check for cancellation before starting expensive operation
         if cancellation_event and cancellation_event.is_set():
@@ -123,12 +132,15 @@ class DemucsProcessor:
             if progress_callback:
                 progress_callback(100.0, "Complete")
 
+            logger.info(f"✓ Completed {audio_path.name}")
             return self._get_stem_paths(cache_path)
 
         except CancellationError:
+            logger.warning(f"Cancelled {audio_path.name}")
             # Re-raise cancellation as-is
             raise
         except Exception as e:
+            logger.error(f"Failed to process {audio_path.name}: {e}")
             error_msg = f"Stem separation failed: {e}"
             raise ProcessingError(error_msg) from e
 

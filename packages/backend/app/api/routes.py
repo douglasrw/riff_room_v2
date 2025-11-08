@@ -14,6 +14,9 @@ from pydantic import BaseModel
 
 from app.api.websocket import manager
 from app.core.demucs_processor import CancellationError, DemucsProcessor, ProcessingError
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -97,6 +100,7 @@ async def process_audio(
 
     # Generate client ID for WebSocket connection
     client_id = str(uuid.uuid4())
+    logger.info(f"Upload received: {file.filename} ({len(content)} bytes) → {client_id}")
 
     # Save uploaded file temporarily
     temp_dir = Path(tempfile.gettempdir()) / "riffroom"
@@ -180,6 +184,7 @@ async def cancel_processing(client_id: str) -> dict[str, str]:
         )
 
     # Signal cancellation
+    logger.info(f"Cancellation requested: {client_id}")
     event.set()
 
     return {
