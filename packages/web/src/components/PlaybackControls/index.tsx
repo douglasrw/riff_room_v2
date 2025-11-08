@@ -52,6 +52,7 @@ export const PlaybackControls = () => {
         <button
           onClick={togglePlay}
           disabled={isLoadingStems}
+          data-testid={isPlaying ? 'pause-button' : 'play-button'}
           className="p-4 bg-indigo-500 hover:bg-indigo-600 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           title={isPlaying ? 'Pause' : 'Play'}
         >
@@ -109,6 +110,7 @@ export const PlaybackControls = () => {
             return (
               <button
                 key={type}
+                data-testid={`stem-control-${type}`}
                 onClick={(e) => {
                   if (e.shiftKey) {
                     toggleStemMute(type);

@@ -59,6 +59,7 @@ export const DragDropZone = () => {
   return (
     <div
       {...getRootProps()}
+      data-testid="drag-drop-zone"
       className={`
         relative border-2 border-dashed rounded-lg p-12 text-center
         transition-all duration-200 cursor-pointer
@@ -69,11 +70,11 @@ export const DragDropZone = () => {
         ${isProcessing || isLoadingStems ? 'opacity-50 cursor-not-allowed' : ''}
       `}
     >
-      <input {...getInputProps()} />
+      <input {...getInputProps()} data-testid="file-input" />
 
       {/* FIXED N6: Show audio loading state */}
       {isLoadingStems ? (
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="loading-status">
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
           </div>
@@ -83,7 +84,7 @@ export const DragDropZone = () => {
           </div>
         </div>
       ) : /* FIXED N4: Display error message to user */ error ? (
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="error-message">
           <div className="flex justify-center">
             <div className="p-4 bg-red-500/20 rounded-full">
               <span className="text-4xl">⚠️</span>
@@ -120,7 +121,7 @@ export const DragDropZone = () => {
           </div>
         </div>
       ) : isProcessing ? (
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="processing-status">
           <div className="flex justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
           </div>

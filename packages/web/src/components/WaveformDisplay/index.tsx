@@ -76,7 +76,7 @@ export const WaveformDisplay = () => {
   if (!currentSong) return null;
 
   return (
-    <div className="relative bg-gray-800 p-4 rounded-lg">
+    <div className="relative bg-gray-800 p-4 rounded-lg" data-testid="waveform-display">
       {/* Waveform container */}
       <div ref={containerRef} className="w-full" />
 
