@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAudioStore } from './audioStore';
+import type { StemType } from '../services/audioEngine';
 
 // Mock audioEngine
 vi.mock('../services/audioEngine', () => ({
@@ -60,7 +61,6 @@ describe('audioStore', () => {
 
     setSpeed(0.7);
 
-    const state = useAudioStore.getState();
     // State might not update immediately due to engine callback
     // In real app, engine would call _updateFromEngine
     expect(useAudioStore.getState()._engine.setSpeed).toHaveBeenCalledWith(0.7);
@@ -90,7 +90,7 @@ describe('audioStore', () => {
     const { muteStem, _engine } = useAudioStore.getState();
 
     // Mock getMutedStems to return drums as muted
-    _engine.getMutedStems = vi.fn(() => new Set(['drums']));
+    _engine.getMutedStems = vi.fn(() => new Set<StemType>(['drums']));
 
     muteStem('drums');
 

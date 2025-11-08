@@ -49,7 +49,7 @@ export const useStemProcessor = () => {
   }, []);
 
   const processSong = useCallback(async (file: File) => {
-    setState({ isProcessing: true, progress: 0, error: null });
+    setState({ isProcessing: true, progress: 0, error: null, canResume: false });
 
     try {
       // FIXED N1: Actually call backend API instead of using mock data
