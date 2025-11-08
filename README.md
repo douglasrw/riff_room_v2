@@ -1,99 +1,411 @@
 # RiffRoom
 
-Music practice made simple - ML-powered stem separation for focused practice.
+**Music practice made simple** - ML-powered stem separation for focused practice.
+
+> Isolate any instrument, slow down without pitch change, loop difficult sections, and track your practice streak.
+
+[![CI](https://github.com/douglasrw/riff_room_v2/actions/workflows/ci.yml/badge.svg)](https://github.com/douglasrw/riff_room_v2/actions/workflows/ci.yml)
+
+---
+
+## Features
+
+### 🎸 Intelligent Stem Separation
+- **4-stem separation**: Isolate drums, bass, vocals, and other (guitar/keys)
+- **ML-powered**: Uses Demucs v4 for state-of-the-art audio separation
+- **Fast processing**: <30 seconds for typical songs
+- **Smart caching**: SHA256-based file hashing for instant replay
+
+### 🎹 Practice Tools
+- **Solo/Mute stems**: Focus on any instrument or combination
+- **Speed control**: 70%, 85%, 100% without pitch change
+- **Loop markers**: Set start/end points for difficult sections
+- **Synchronized playback**: All stems perfectly aligned
+- **Keyboard shortcuts**: Space, arrow keys, 1-4 for stems
+
+### 📊 Progress Tracking
+- **Practice streaks**: Track consecutive days of practice
+- **Session recording**: Log time, songs, and loops practiced
+- **Achievements**: Unlock milestones (7-day streak, 10 songs, 100 hours)
+- **Statistics**: Weekly practice time and session analytics
+
+### 💾 Smart Caching
+- **Multi-layer cache**: Memory (100MB) + IndexedDB (1GB) + Filesystem
+- **LRU eviction**: Intelligent cache management
+- **Offline support**: Practice without internet after first load
+
+---
 
 ## Architecture
 
-- **packages/desktop**: Electron wrapper for desktop app
-- **packages/web**: React frontend (Vite + TypeScript + Tailwind)
-- **packages/backend**: Python ML backend (FastAPI + Demucs)
+```
+riff_room_v2/
+├── packages/
+│   ├── desktop/          # Electron wrapper (cross-platform desktop)
+│   ├── web/             # React frontend (Vite + TypeScript + Tailwind)
+│   └── backend/         # Python ML backend (FastAPI + Demucs)
+├── scripts/             # Build & setup automation
+└── .github/workflows/   # CI/CD pipelines
+```
+
+**Tech Stack:**
+- **Frontend**: React 18, TypeScript 5, Vite 5, Tailwind CSS, Zustand, Tone.js, WaveSurfer.js
+- **Backend**: Python 3.12, FastAPI, Demucs v4, librosa, SQLite, WebSockets
+- **Desktop**: Electron 33 with context isolation & CSP security
+
+---
 
 ## Development Setup
 
 ### Prerequisites
 
-- Node.js 20+
-- pnpm 9+
-- Python 3.14+
-- uv (Python package manager)
+- **Node.js** 20+ ([Download](https://nodejs.org/))
+- **pnpm** 9+ (`npm install -g pnpm`)
+- **Python** 3.12+ ([Download](https://www.python.org/downloads/))
+- **uv** (Python package manager: `pip install uv`)
 
 ### Quick Start
 
-1. **Install dependencies**
+1. **Clone repository**
    ```bash
+   git clone https://github.com/douglasrw/riff_room_v2.git
+   cd riff_room_v2
+   ```
+
+2. **Install dependencies**
+   ```bash
+   # Frontend dependencies
    pnpm install
-   cd packages/backend && uv sync
+
+   # Backend dependencies
+   cd packages/backend
+   uv sync
+   cd ../..
    ```
 
-2. **Configure environment**
+3. **Configure environment**
    ```bash
+   # Frontend configuration
+   cd packages/web
    cp .env.example .env
-   # Edit .env as needed
+   # Edit .env if needed (defaults work for local dev)
+
+   # Backend configuration
+   cd ../backend
+   cp .env.example .env
+   # Edit .env if needed (defaults work for local dev)
    ```
 
-3. **Start development servers**
+4. **Start development servers**
    ```bash
+   # From project root
    pnpm dev
    ```
 
-   This runs:
-   - Web frontend: http://localhost:5173
-   - Backend API: http://localhost:8007
-   - Electron desktop app
+   This starts:
+   - **Web frontend**: http://localhost:5173
+   - **Backend API**: http://localhost:8007
+   - **API docs**: http://localhost:8007/docs (FastAPI Swagger UI)
+
+5. **Verify setup**
+   - Open http://localhost:5173
+   - Drag & drop an MP3/WAV/M4A file
+   - Wait ~30s for stem separation
+   - Play with isolated stems!
+
+---
+
+## Environment Configuration
+
+### Frontend (`packages/web/.env`)
+
+```bash
+# Backend API URL
+# Development: http://localhost:8007
+# Production: https://api.riffroom.app
+VITE_API_URL=http://localhost:8007
+```
+
+### Backend (`packages/backend/.env`)
+
+```bash
+# API Base URL (for CORS and client references)
+API_BASE_URL=http://localhost:8007
+
+# Cache directory for processed stems
+# Stores separated stems for reuse
+CACHE_DIR=~/.riffroom/stems
+
+# Debug mode
+# true: Verbose logging, auto-reload
+# false: Production logging
+DEBUG=true
+
+# CORS allowed origins (comma-separated)
+# Add your frontend URLs
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+---
+
+## Database
+
+**Location**: `~/.riffroom/riffroom.db` (SQLite)
+
+**Tables**:
+- `songs` - Uploaded tracks and metadata
+- `stems` - Processed stem files (drums, bass, other, vocals)
+- `sessions` - Practice sessions with duration, loops, stems used
+- `streaks` - Daily practice stats (time, songs, session count)
+- `achievements` - Unlocked milestones
+
+**Auto-created** on first backend startup. No manual setup required.
+
+---
+
+## API Endpoints
+
+### Processing
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/process` | Upload audio file for stem separation |
+| `GET` | `/api/stems/{client_id}` | Get processed stems (use WebSocket instead) |
+| `WS` | `/ws/{client_id}` | Real-time progress updates |
+
+### Practice Tracking
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/sessions` | Record practice session |
+| `GET` | `/api/sessions?song_id={id}&limit={n}` | List sessions |
+| `GET` | `/api/streaks?since={date}&limit={n}` | List daily streaks |
+| `GET` | `/api/streaks/{date}` | Get specific day stats |
+| `PATCH` | `/api/streaks/{date}` | Update day stats (incremental) |
+| `GET` | `/api/achievements` | List unlocked achievements |
+| `POST` | `/api/achievements` | Unlock achievement |
+
+### Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/docs` | OpenAPI documentation |
+
+**Full API docs**: http://localhost:8007/docs (when backend is running)
+
+---
+
+## Development Commands
+
+```bash
+# Development
+pnpm dev                # Start all services (web + backend)
+pnpm dev:web           # Frontend only
+pnpm dev:backend       # Backend only (Python)
+
+# Build
+pnpm build             # Build all packages
+pnpm build:web         # Build frontend (production)
+pnpm build:desktop     # Build Electron app
+
+# Code Quality
+pnpm lint              # Lint TypeScript & Python
+pnpm type-check        # TypeScript type checking
+pnpm format            # Format code with Prettier
+
+# Testing
+pnpm test              # Run all tests
+pnpm test:web          # Frontend tests (Vitest)
+pnpm test:e2e          # E2E tests (Playwright)
+cd packages/backend && pytest  # Backend tests
+```
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
+| `←` | Skip back 5s |
+| `→` | Skip forward 5s |
+| `Shift + ←` | Skip back 10s |
+| `Shift + →` | Skip forward 10s |
+| `1` | Solo drums |
+| `2` | Solo bass |
+| `3` | Solo other (guitar/keys) |
+| `4` | Solo vocals |
+| `0` | Unsolo all |
+| `Shift + 1-4` | Mute/unmute stem |
+| `S` | Cycle speed (70% → 85% → 100%) |
+| `[` | Set loop start |
+| `]` | Set loop end |
+| `Shift + [` | Clear loop |
+| `?` | Show shortcuts |
+| `Esc` | Close shortcuts |
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+
+**Error**: `ModuleNotFoundError: No module named 'demucs'`
+
+**Solution**:
+```bash
+cd packages/backend
+uv sync  # Reinstall dependencies
+```
+
+---
+
+### Stems not processing
+
+**Error**: File upload succeeds but no progress
+
+**Solutions**:
+1. Check backend is running: http://localhost:8007/health
+2. Check browser console for WebSocket errors
+3. Verify CORS_ORIGINS includes your frontend URL
+4. Try smaller file (<50MB for testing)
+
+---
+
+### WebSocket connection failed
+
+**Error**: `WebSocket connection to 'ws://localhost:8007/ws/...' failed`
+
+**Solutions**:
+1. Verify backend is running
+2. Check VITE_API_URL in `packages/web/.env`
+3. Check browser console for specific error
+4. Try different port if 8007 is in use
+
+---
+
+### Cache directory errors
+
+**Error**: `Permission denied` when writing to cache
+
+**Solution**:
+```bash
+# Check cache directory exists and is writable
+ls -la ~/.riffroom/
+# Or change cache location in packages/backend/.env
+CACHE_DIR=./local-cache
+```
+
+---
+
+### Python version mismatch
+
+**Error**: `Python 3.14 not found` or similar
+
+**Solution**: This project uses **Python 3.12**, not 3.14. Update to Python 3.12:
+```bash
+# macOS (Homebrew)
+brew install python@3.12
+
+# Windows (Chocolatey)
+choco install python312
+
+# Verify version
+python3 --version  # Should show 3.12.x
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Run tests (`pnpm test`, `cd packages/backend && pytest`)
+4. Run linting (`pnpm lint`)
+5. Commit changes (`git commit -m 'feat: add amazing feature'`)
+6. Push to branch (`git push origin feature/amazing-feature`)
+7. Open Pull Request
+
+**Commit message format**: [Conventional Commits](https://www.conventionalcommits.org/)
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation
+- `chore:` Maintenance
+- `test:` Tests
+
+---
 
 ## Project Structure
 
 ```
 riff_room_v2/
 ├── packages/
-│   ├── desktop/          # Electron app
-│   ├── web/             # React frontend
-│   └── backend/         # Python ML backend
-├── scripts/             # Build & setup scripts
-└── docs/               # Documentation
+│   ├── desktop/
+│   │   ├── src/
+│   │   │   ├── main/       # Electron main process
+│   │   │   └── preload/    # Preload scripts
+│   │   └── package.json
+│   ├── web/
+│   │   ├── src/
+│   │   │   ├── components/ # React components
+│   │   │   ├── hooks/      # Custom hooks
+│   │   │   ├── services/   # Audio engine, WebSocket, cache
+│   │   │   ├── stores/     # Zustand state
+│   │   │   └── App.tsx     # Root component
+│   │   ├── tests/          # Vitest & Playwright tests
+│   │   └── package.json
+│   └── backend/
+│       ├── app/
+│       │   ├── api/        # FastAPI routes
+│       │   ├── core/       # Demucs processor, loop detection
+│       │   ├── models/     # SQLModel schemas
+│       │   └── main.py     # FastAPI app
+│       ├── tests/          # Pytest tests
+│       └── pyproject.toml  # Python dependencies (uv)
+├── scripts/
+│   ├── setup-dev.sh        # Development environment setup
+│   ├── download-models.py  # Download Demucs models
+│   └── build-release.sh    # Production build
+├── .github/
+│   └── workflows/
+│       ├── ci.yml          # Continuous integration
+│       └── release.yml     # Release builds
+└── README.md
 ```
 
-## Development Commands
+---
 
-```bash
-# Development
-pnpm dev                # Start all services
-pnpm dev:web           # Frontend only
-pnpm dev:backend       # Backend only
+## Performance Notes
 
-# Build
-pnpm build             # Build all packages
-pnpm build:web         # Build frontend
-pnpm build:desktop     # Build Electron app
+- **Stem separation**: ~15-30s depending on song length and CPU/GPU
+- **GPU acceleration**: Automatic if CUDA available (10x faster)
+- **Memory usage**: ~2GB for backend during processing
+- **Cache size**: ~50MB per song (4 stems × ~12MB each)
+- **Frontend bundle**: <2MB gzipped
 
-# Testing
-pnpm test              # Run tests
-pnpm lint              # Lint code
-pnpm format            # Format code
-```
-
-## Tech Stack
-
-### Frontend
-- React 18.3
-- TypeScript 5.6
-- Vite 5.4
-- TailwindCSS 3.4
-- Zustand (state)
-- TanStack Query (data fetching)
-- Tone.js + WaveSurfer.js (audio)
-
-### Backend
-- Python 3.14
-- FastAPI 0.115
-- Demucs 4.0 (stem separation)
-- librosa (audio analysis)
-- SQLite (database)
-
-### Desktop
-- Electron 33
-- Context isolation + security
+---
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## Acknowledgments
+
+- **Demucs**: Alexandre Défossez et al. - [Paper](https://arxiv.org/abs/2211.08553)
+- **librosa**: Music and audio analysis in Python
+- **Tone.js**: Web Audio framework
+- **WaveSurfer.js**: Audio waveform visualization
+
+---
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/douglasrw/riff_room_v2/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/douglasrw/riff_room_v2/discussions)
+
+---
+
+Built with multi-agent coordination using [Claude Code](https://claude.com/claude-code)
