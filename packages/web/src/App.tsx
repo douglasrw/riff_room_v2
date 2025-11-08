@@ -5,6 +5,9 @@ import { WaveformDisplay } from './components/WaveformDisplay';
 import { PlaybackControls } from './components/PlaybackControls';
 import { StreakIndicator } from './components/StreakIndicator';
 import { KeyboardOverlay } from './components/KeyboardOverlay';
+import { ToastProvider } from './contexts/ToastContext';
+import { ToastContainer } from './components/Toast';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { useAudioStore } from './stores/audioStore';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
@@ -24,6 +27,9 @@ function AppContent() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
+      {/* Offline Indicator */}
+      <OfflineIndicator />
+
       {/* Header */}
       <header className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900/95 backdrop-blur">
         <div className="flex items-center gap-4">
@@ -101,15 +107,21 @@ function AppContent() {
 
       {/* Keyboard Overlay */}
       <KeyboardOverlay />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }
 
 // FIXED M1: Wrap app with ErrorBoundary to prevent full crashes
+// FIXED bd-t0c: Add ToastProvider for global error notifications
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </ErrorBoundary>
   );
 }
